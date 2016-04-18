@@ -68,8 +68,11 @@ void do_init()
 			default:
 				break;
 		}
+
+		pageTable[i].proType|=READABLE|WRITABLE;
+
 		/* 设置该页对应的辅存地址 */
-		pageTable[i].auxAddr = i * PAGE_SIZE * 2;
+		pageTable[i].auxAddr = i * PAGE_SIZE;
 	}
 	for (j = 0; j < BLOCK_SUM; j++)
 	{
@@ -199,7 +202,7 @@ void do_LFU(Ptr_PageTableItem ptr_pageTabIt)
 	printf("没有空闲物理块，开始进行LFU页面替换...\n");
 	for (i = 0, min = 0xFFFFFFFF, page = 0; i < PAGE_SUM; i++)
 	{
-		if (pageTable[i].count < min)
+		if (pageTable[i].count < min && pageTable[i].filled)
 		{
 			min = pageTable[i].count;
 			page = i;
@@ -347,7 +350,7 @@ void do_request()
 	/* 随机产生请求地址 */
 	ptr_memAccReq->virAddr = random() % VIRTUAL_MEMORY_SIZE;
 	/* 随机产生请求类型 */
-	switch (random() % 3)
+	switch (random() %5 % 3)
 	{
 		case 0: //读请求
 		{
@@ -409,12 +412,24 @@ char *get_proType_str(char *str, BYTE type)
 
 int main(int argc, char* argv[])
 {
-	char c;
+	char c=0;
 	int i;
-	if (!(ptr_auxMem = fopen(AUXILIARY_MEMORY, "r+"))&&!(ptr_auxMem = fopen(AUXILIARY_MEMORY, "w+")))
+	if (!(ptr_auxMem = fopen(AUXILIARY_MEMORY, "r+")))
 	{
-		do_error(ERROR_FILE_OPEN_FAILED);
-		exit(1);
+		if (!(ptr_auxMem = fopen(AUXILIARY_MEMORY, "w+")))
+		{
+			do_error(ERROR_FILE_OPEN_FAILED);
+			exit(1);
+		}
+		else {
+			for (i=0;i<VIRTUAL_MEMORY_SIZE;++i) fwrite(&c,1,1,ptr_auxMem);
+			fclose(ptr_auxMem);
+			if (!(ptr_auxMem = fopen(AUXILIARY_MEMORY, "r+")))
+			{
+				do_error(ERROR_FILE_OPEN_FAILED);
+				exit(1);
+			}
+		}
 	}
 	printf("Initiailizing...\n");
 	
