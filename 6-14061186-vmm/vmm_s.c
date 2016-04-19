@@ -1,20 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <sys/ipc.h>
-#include <fcntl.h>
-#include <signal.h>
 #include <time.h>
-#include "fifosr.h"
 #include "vmm.h"
 
-/* process页表 */
-
-Ptr_ProcessItem process[PROC_MAXN];
-
+/* 页表 */
+PageTableItem pageTable[PAGE_SUM];
 /* 实存空间 */
 BYTE actMem[ACTUAL_MEMORY_SIZE];
 /* 用文件模拟辅存空间 */
@@ -24,39 +14,10 @@ BOOL blockStatus[BLOCK_SUM];
 /* 访存请求 */
 Ptr_MemoryAccessRequest ptr_memAccReq;
 
-int fd, fd2, goon=1;
-
-char statbuff[1<<15];
-
-
-
-void synch()
-{
-	goon=0;
-	printf("sure\n");
-}
-
-void echo_s()
-{
-	char s='s';
-	write(fd2,&s,1);
-}
-
-void echo_f()
-{
-	char f='f';
-	write(fd2,&f,1);
-}
-
-
-void echo_c(BYTE x)
-{
-	write(fd2,&x,1);
-}
 
 
 /* 初始化环境 */
-void do_init(int auxID, Ptr_PageTableItem pageTable)
+void do_init()
 {
 	int i, j;
 	srandom(time(NULL));
@@ -111,7 +72,20 @@ void do_init(int auxID, Ptr_PageTableItem pageTable)
 		pageTable[i].proType|=READABLE|WRITABLE;
 
 		/* 设置该页对应的辅存地址 */
-		pageTable[i].auxAddr = auxID *VIRTUAL_MEMORY_SIZE + i * PAGE_SIZE;
+		pageTable[i].auxAddr = i * PAGE_SIZE;
+	}
+	for (j = 0; j < BLOCK_SUM; j++)
+	{
+		/* 随机选择一些物理块进行页面装入 */
+		if (random() % 2 == 0)
+		{
+			do_page_in(&pageTable[j], j);
+			pageTable[j].blockNum = j;
+			pageTable[j].filled = TRUE;
+			blockStatus[j] = TRUE;
+		}
+		else
+			blockStatus[j] = FALSE;
 	}
 }
 
@@ -122,22 +96,7 @@ void do_response()
 	Ptr_PageTableItem ptr_pageTabIt;
 	unsigned int pageNum, offAddr;
 	unsigned int actAddr;
-	int i;
-	Ptr_PageTableItem pageTable=NULL;
-
-	for (i=0;i<PROC_MAXN;++i)
-	if (process[i]!=NULL&&process[i]->pid==ptr_memAccReq->pid)
-	{
-		pageTable=process[i]->paget;
-		break;
-	}
-
-	if (pageTable==NULL)
-	{
-		printf("pid %d not found.\n",ptr_memAccReq->pid);
-		return;
-	}
-
+	
 	/* 检查地址是否越界 */
 	if (ptr_memAccReq->virAddr < 0 || ptr_memAccReq->virAddr >= VIRTUAL_MEMORY_SIZE)
 	{
@@ -156,7 +115,7 @@ void do_response()
 	/* 根据特征位决定是否产生缺页中断 */
 	if (!ptr_pageTabIt->filled)
 	{
-		do_page_fault(ptr_pageTabIt, pageTable);
+		do_page_fault(ptr_pageTabIt);
 	}
 	
 	actAddr = ptr_pageTabIt->blockNum * PAGE_SIZE + offAddr;
@@ -171,13 +130,10 @@ void do_response()
 			if (!(ptr_pageTabIt->proType & READABLE)) //页面不可读
 			{
 				do_error(ERROR_READ_DENY);
-				echo_f();			
 				return;
 			}
 			/* 读取实存中的内容 */
 			printf("读操作成功：值为%02X\n", actMem[actAddr]);
-			echo_s();
-			echo_c(actMem[actAddr]);
 			break;
 		}
 		case REQUEST_WRITE: //写请求
@@ -186,14 +142,12 @@ void do_response()
 			if (!(ptr_pageTabIt->proType & WRITABLE)) //页面不可写
 			{
 				do_error(ERROR_WRITE_DENY);	
-				echo_f();			
 				return;
 			}
 			/* 向实存中写入请求的内容 */
 			actMem[actAddr] = ptr_memAccReq->value;
 			ptr_pageTabIt->edited = TRUE;			
 			printf("写操作成功\n");
-			echo_s();
 			break;
 		}
 		case REQUEST_EXECUTE: //执行请求
@@ -202,24 +156,21 @@ void do_response()
 			if (!(ptr_pageTabIt->proType & EXECUTABLE)) //页面不可执行
 			{
 				do_error(ERROR_EXECUTE_DENY);
-				echo_f();			
 				return;
 			}			
 			printf("执行成功\n");
-			echo_s();
 			break;
 		}
 		default: //非法请求类型
 		{	
 			do_error(ERROR_INVALID_REQUEST);
-			echo_f();			
 			return;
 		}
 	}
 }
 
 /* 处理缺页中断 */
-void do_page_fault(Ptr_PageTableItem ptr_pageTabIt, Ptr_PageTableItem pageTable)
+void do_page_fault(Ptr_PageTableItem ptr_pageTabIt)
 {
 	unsigned int i;
 	printf("产生缺页中断，开始进行调页...\n");
@@ -241,11 +192,11 @@ void do_page_fault(Ptr_PageTableItem ptr_pageTabIt, Ptr_PageTableItem pageTable)
 		}
 	}
 	/* 没有空闲物理块，进行页面替换 */
-	do_LFU(ptr_pageTabIt, pageTable);
+	do_LFU(ptr_pageTabIt);
 }
 
 /* 根据LFU算法进行页面替换 */
-void do_LFU(Ptr_PageTableItem ptr_pageTabIt, Ptr_PageTableItem pageTable)
+void do_LFU(Ptr_PageTableItem ptr_pageTabIt)
 {
 	unsigned int i, min, page;
 	printf("没有空闲物理块，开始进行LFU页面替换...\n");
@@ -331,12 +282,72 @@ void do_page_out(Ptr_PageTableItem ptr_pageTabIt)
 	printf("写回成功：物理块%u-->>辅存地址%03X\n", ptr_pageTabIt->auxAddr, ptr_pageTabIt->blockNum);
 }
 
+/* 错误处理 */
+void do_error(ERROR_CODE code)
+{
+	switch (code)
+	{
+		case ERROR_READ_DENY:
+		{
+			printf("访存失败：该地址内容不可读\n");
+			break;
+		}
+		case ERROR_WRITE_DENY:
+		{
+			printf("访存失败：该地址内容不可写\n");
+			break;
+		}
+		case ERROR_EXECUTE_DENY:
+		{
+			printf("访存失败：该地址内容不可执行\n");
+			break;
+		}		
+		case ERROR_INVALID_REQUEST:
+		{
+			printf("访存失败：非法访存请求\n");
+			break;
+		}
+		case ERROR_OVER_BOUNDARY:
+		{
+			printf("访存失败：地址越界\n");
+			break;
+		}
+		case ERROR_FILE_OPEN_FAILED:
+		{
+			printf("系统错误：打开文件失败\n");
+			break;
+		}
+		case ERROR_FILE_CLOSE_FAILED:
+		{
+			printf("系统错误：关闭文件失败\n");
+			break;
+		}
+		case ERROR_FILE_SEEK_FAILED:
+		{
+			printf("系统错误：文件指针定位失败\n");
+			break;
+		}
+		case ERROR_FILE_READ_FAILED:
+		{
+			printf("系统错误：读取文件失败\n");
+			break;
+		}
+		case ERROR_FILE_WRITE_FAILED:
+		{
+			printf("系统错误：写入文件失败\n");
+			break;
+		}
+		default:
+		{
+			printf("未知错误：没有这个错误代码\n");
+		}
+	}
+}
 
 /* 产生访存请求 */
-void do_request(int pid)
+void do_request()
 {
 	/* 随机产生请求地址 */
-	ptr_memAccReq->pid=pid;
 	ptr_memAccReq->virAddr = random() % VIRTUAL_MEMORY_SIZE;
 	/* 随机产生请求类型 */
 	switch (random() %5 % 3)
@@ -367,43 +378,17 @@ void do_request(int pid)
 }
 
 /* 打印页表 */
-void do_print_info(int x, int writeback)
+void do_print_info()
 {
-	unsigned int i, j, k, offset=0;
+	unsigned int i, j, k;
 	char str[4];
-	Ptr_PageTableItem pageTable;
-	if (x<4)
-		pageTable=process[x]->paget;
-	else 
-	{
-		for (i=0;i<PROC_MAXN;++i) 
-			if (process[i]!=NULL&&process[i]->pid==x)
-			{
-				x=i;
-				break;
-			}
-		pageTable=process[x]->paget;		
-	}
-	if (x<0||x>3) {
-		printf("pid %d not found.\n",x);
-		if (writeback) echo_f();
-		return;
-	}
-	offset+=sprintf(statbuff+offset,"页号\t块号\t装入\t修改\t保护\t计数\t辅存\n");
+	printf("页号\t块号\t装入\t修改\t保护\t计数\t辅存\n");
 	for (i = 0; i < PAGE_SUM; i++)
 	{
-		offset+=sprintf(statbuff+offset,"%u\t%u\t%u\t%u\t%s\t%u\t%u\n", i, pageTable[i].blockNum, pageTable[i].filled, 
+		printf("%u\t%u\t%u\t%u\t%s\t%u\t%u\n", i, pageTable[i].blockNum, pageTable[i].filled, 
 			pageTable[i].edited, get_proType_str(str, pageTable[i].proType), 
 			pageTable[i].count, pageTable[i].auxAddr);
 	}
-	statbuff[offset]=0;
-	if (writeback)
-	{
-		echo_s();
-		write(fd2,statbuff,offset);
-		echo_c('$');
-	}
-	printf("%s\n", statbuff);
 }
 
 /* 获取页面保护类型字符串 */
@@ -425,78 +410,10 @@ char *get_proType_str(char *str, BYTE type)
 	return str;
 }
 
-void dispose()
+int main(int argc, char* argv[])
 {
-	int i;
-	struct stat statb;	
-	close(fd);
-	close(fd2);
-	if (fclose(ptr_auxMem) == EOF)
-	{
-		do_error(ERROR_FILE_CLOSE_FAILED);
-		exit(1);
-	}
-	for (i=0;i<PROC_MAXN;++i) 
-		if (process[i]!=NULL) free(process[i]);
-	if(stat(REQFIFO,&statb)==0){
-		remove(REQFIFO);
-	}
-	if(stat(RESFIFO,&statb)==0){
-		remove(RESFIFO);
-	}
-	printf("bye\n");
-	exit(0);
-}
-
-void new_proc(int pid)
-{
-	int i;
-	for (i=0;i<PROC_MAXN;++i)
-	if (process[i]==NULL)
-	{
-		process[i]=(Ptr_ProcessItem)malloc(sizeof(ProcessItem));
-		process[i]->pid=pid;
-		do_init(i,process[i]->paget);
-		//do_print_info(i,0);
-		echo_s();
-		i=getpid();
-		write(fd2,&i,4);		
-		return;
-	}
-	printf("Insufficient Memory.\n");
-	echo_f();
-}
-
-void free_proc(int pid)
-{
-	int i,j;
-	for (i=0;i<PROC_MAXN;++i)
-	if (process[i]!=NULL&&process[i]->pid==pid)
-	{
-		for (j=0;j<PAGE_SUM;++j)
-		{
-			if (process[i]->paget[j].filled)
-			{
-				blockStatus[process[i]->paget[j].blockNum]=FALSE;
-			}
-		}
-		free(process[i]);
-		process[i]=NULL;
-		printf("rm: pid %d\n", pid);
-		echo_s();
-		return;
-	}
-	printf("pid %d not found.\n",pid);
-	echo_f();
-}
-
-
-void environmentInit()
-{
-	int i,j;
-	struct stat statb;	
 	char c=0;
-	printf("Initiailizing...\n");
+	int i;
 	if (!(ptr_auxMem = fopen(AUXILIARY_MEMORY, "r+")))
 	{
 		if (!(ptr_auxMem = fopen(AUXILIARY_MEMORY, "w+")))
@@ -505,7 +422,7 @@ void environmentInit()
 			exit(1);
 		}
 		else {
-			for (i=0;i<DISK_SIZE;++i) fwrite(&c,1,1,ptr_auxMem);
+			for (i=0;i<VIRTUAL_MEMORY_SIZE;++i) fwrite(&c,1,1,ptr_auxMem);
 			fclose(ptr_auxMem);
 			if (!(ptr_auxMem = fopen(AUXILIARY_MEMORY, "r+")))
 			{
@@ -514,125 +431,33 @@ void environmentInit()
 			}
 		}
 	}
-	printf("DISK STATUS: ready\n");
-	signal(SIGINT,dispose);
-	signal(SIGUSR1,synch);
-	for (i=0;i<PROC_MAXN;++i) process[i]=NULL;
+	printf("Initiailizing...\n");
+	
+	do_init();
+	do_print_info();
 	ptr_memAccReq = (Ptr_MemoryAccessRequest) malloc(sizeof(MemoryAccessRequest));
-	for (j = 0; j < BLOCK_SUM; j++)
-	{
-		blockStatus[j] = FALSE;
-	}
-
-	if(stat(REQFIFO,&statb)==0){
-		/*  */
-		if(remove(REQFIFO)<0)
-		{
-			do_error(ERROR_FILE_OPEN_FAILED);
-			dispose();
-		}
-	}
-
-	if(mkfifo(REQFIFO,0777)<0||(fd=open(REQFIFO,O_RDONLY))<0)
-	{
-		do_error(ERROR_FILE_OPEN_FAILED);
-		dispose();
-	}
-
-	printf("REQFIFO STATUS: ready\n");
-
-	printf("started.\n");
-}
-
-char getReq()
-{
-	char c=' ';
-	int count, pid=0;
-	while ((count = read(fd,&c,1))<=0)
-	{
-		if (count<0)
-		{
-			do_error(ERROR_FILE_OPEN_FAILED);
-			dispose();
-		}
-	}
-	if (count==0||c!='i'&&c!='e'&&c!='s'&&c!='r')
-		return ' ';
-
-	printf("getReq: %c\n",c);
-
-	if (c=='i') 
-	{
-		count=0;
-		while ((fd2=open(RESFIFO,O_WRONLY))<0) 
-		{
-			++count;
-			sleep(0.1);
-			if (count>100)
-			{
-				do_error(ERROR_FILE_OPEN_FAILED);
-				dispose();
-			}
-		}		
-	}
-	else 
-	{
-		while (goon);
-		if ((fd2=open(RESFIFO,O_WRONLY))<0) 
-		{
-			do_error(ERROR_FILE_OPEN_FAILED);
-			dispose();
-		}
-		goon=1;
-	}
-
-	if((count = read(fd,&pid,4))<=0)
-	{
-		do_error(ERROR_FILE_OPEN_FAILED);
-		dispose();
-	}
-
-	printf("getPid: %d\n",pid);
-	ptr_memAccReq->pid=pid;
-	if (c=='r')
-	{
-		if((count = read(fd,ptr_memAccReq,sizeof(MemoryAccessRequest)))<=0)
-		{
-			do_error(ERROR_FILE_OPEN_FAILED);
-			dispose();
-		}
-
-	}
-	return c;
-}
-
-int main(int argc, char* argv[])
-{
-	char c=0;
-	environmentInit();
 	/* 在循环中模拟访存请求与处理过程 */
 	while (TRUE)
 	{
-		switch (getReq())
-		{
-			case 'e':
-				free_proc(ptr_memAccReq->pid);
-				break;			
-			case 'i':
-				new_proc(ptr_memAccReq->pid);
-				break;			
-			case 's':
-				do_print_info(ptr_memAccReq->pid,1);
-				break;
-			case 'r':
-				do_response();
-				break;
-			default:
-				break;				
-		}
-		close(fd2);
+		do_request();
+		do_response();
+		printf("按Y打印页表，按其他键不打印...\n");
+		if ((c = getchar()) == 'y' || c == 'Y')
+			do_print_info();
+		while (c != '\n')
+			c = getchar();
+		printf("按X退出程序，按其他键继续...\n");
+		if ((c = getchar()) == 'x' || c == 'X')
+			break;
+		while (c != '\n')
+			c = getchar();
 		//sleep(5000);
 	}
 
-	return 0;
+	if (fclose(ptr_auxMem) == EOF)
+	{
+		do_error(ERROR_FILE_CLOSE_FAILED);
+		exit(1);
+	}
+	return (0);
 }
