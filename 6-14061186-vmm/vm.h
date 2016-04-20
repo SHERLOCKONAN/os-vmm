@@ -7,20 +7,43 @@
 #define REQFIFO "/tmp/vmm_requ"
 #define RESFIFO "/tmp/vmm_resp"
 
-/* 页面大小（字节）*/
-#define PAGE_SIZE 4
-/* disk空间大小（字节） */
-#define DISK_SIZE (1024* 4)
-/* 虚存空间大小（字节） */
-#define VIRTUAL_MEMORY_SIZE (256* 4)
-/* 实存空间大小（字节） */ 
-#define ACTUAL_MEMORY_SIZE (64 * 4)
-/* 总虚页数 */
-#define PAGE_SUM (VIRTUAL_MEMORY_SIZE / PAGE_SIZE)
-/* 总物理块数 */
-#define BLOCK_SUM (ACTUAL_MEMORY_SIZE / PAGE_SIZE)
+#define PAGE_LEN 2u
 
-#define PROC_MAXN (DISK_SIZE / VIRTUAL_MEMORY_SIZE)
+#define DISK_LEN 12u
+
+#define VIRTUAL_MEMORY_LEN 10u
+
+#define ACTUAL_MEMORY_LEN 8u
+
+#define IDX2_LEN 5u
+
+#define IDX1_LEN 8u
+
+/* 页面大小（字节）*/
+#define PAGE_SIZE (1u<<PAGE_LEN)
+/* disk空间大小（字节） */
+#define DISK_SIZE (1u<<DISK_LEN)
+/* 虚存空间大小（字节） */
+#define VIRTUAL_MEMORY_SIZE (1u<<VIRTUAL_MEMORY_LEN)
+/* 实存空间大小（字节） */ 
+#define ACTUAL_MEMORY_SIZE (1u<<ACTUAL_MEMORY_LEN)
+
+#define IDX2_SIZE (1u<<IDX2_LEN)
+
+#define IDX1_SIZE (1u<<IDX1_LEN)
+/* 总虚页数 */
+#define PAGE_SUM (1u<<(VIRTUAL_MEMORY_LEN - PAGE_LEN))
+
+#define ITEM_SUM (1u<<(IDX2_LEN-PAGE_LEN))
+
+#define IDX2_SUM (1u<<(IDX1_LEN-IDX2_LEN))
+
+#define IDX1_SUM (1u<<(VIRTUAL_MEMORY_LEN-IDX1_LEN))
+
+/* 总物理块数 */
+#define BLOCK_SUM (1u<<(ACTUAL_MEMORY_LEN - PAGE_LEN))
+
+#define PROC_MAXN (1u<<(DISK_LEN - VIRTUAL_MEMORY_LEN))
 
 /* 可读标识位 */
 #define READABLE 0x01u

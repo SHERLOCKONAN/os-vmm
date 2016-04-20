@@ -23,13 +23,20 @@ typedef struct
 /* 页表目录项 */
 typedef struct
 {
-	unsigned int pageIndex;
-	unsigned int offset; //位移
-} PageIndexItem, *Ptr_PageIndexItem;
+	PageTableItem paget[ITEM_SUM];
+} Index2Item, *Ptr_Index2Item;
 
 typedef struct
 {
-	PageTableItem paget[PAGE_SUM];
+	Ptr_Index2Item paget[IDX2_SUM];
+} Index1Item, *Ptr_Index1Item;
+
+typedef struct
+{
+	//Ptr_PageTableItem paget[PAGE_SUM];
+	//singlePage
+	Ptr_Index1Item paget[IDX1_SUM];
+	//multiplyPage
 	int pid;
 } ProcessItem, *Ptr_ProcessItem;
 
@@ -40,10 +47,10 @@ void do_request();
 void do_response();
 
 /* 处理缺页中断 */
-void do_page_fault(Ptr_PageTableItem, Ptr_PageTableItem pageTable);
+void do_page_fault(Ptr_PageTableItem, Ptr_MemoryAccessRequest ptr);
 
 /* LFU页面替换 */
-void do_LFU(Ptr_PageTableItem, Ptr_PageTableItem pageTable);
+void do_LFU(Ptr_PageTableItem, Ptr_MemoryAccessRequest req);
 
 /* 装入页面 */
 void do_page_in(Ptr_PageTableItem, unsigned in);
@@ -56,6 +63,8 @@ void do_print_info();
 
 /* 获取页面保护类型字符串 */
 char *get_proType_str(char *, BYTE);
+
+void free_proc(int pid);
 
 
 #endif

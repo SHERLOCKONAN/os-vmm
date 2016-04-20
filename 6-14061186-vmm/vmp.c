@@ -27,7 +27,7 @@ int pid, spid;
 void do_init()
 {
 	command=(cmd*)malloc(sizeof(cmd));
-	ptr_memAccReq = (Ptr_MemoryAccessRequest*) malloc(sizeof(MemoryAccessRequest));
+	ptr_memAccReq = (Ptr_MemoryAccessRequest) malloc(sizeof(MemoryAccessRequest));
 	if (connect(REQFIFO,'i',&fd)<0)
 	{
 		printf("Initiailization failed. \n");
@@ -156,7 +156,6 @@ int do_request_k()
 		}
 		else 
 		{
-			printf("receiving...\n");
 			if (arrival(RESFIFO,&fd2,spid)<0||_STAT<0||_st=='f'||receive(&res,1,fd2)<0)
 			{
 				disconnect(fd2);
