@@ -103,8 +103,10 @@ void do_response()
 	}
 	
 	/* 计算页号和页内偏移值 */
-	pageNum = ptr_memAccReq->virAddr / PAGE_SIZE;
-	offAddr = ptr_memAccReq->virAddr % PAGE_SIZE;
+	//I'm drunk......我也是醉了.....
+	/* pageTable[i].auxAddr = i * PAGE_SIZE * 2;so i = auxAddr or virAddr / (PAGE_SIZE * 2)*/
+	pageNum = ptr_memAccReq->virAddr / (PAGE_SIZE*2);
+	offAddr = ptr_memAccReq->virAddr % (PAGE_SIZE*2);
 	printf("页号为：%u\t页内偏移为：%u\n", pageNum, offAddr);
 
 	/* 获取对应页表项 */
@@ -174,6 +176,7 @@ void do_page_fault(Ptr_PageTableItem ptr_pageTabIt)
 	printf("产生缺页中断，开始进行调页...\n");
 	for (i = 0; i < BLOCK_SUM; i++)
 	{
+		//be not used
 		if (!blockStatus[i])
 		{
 			/* 读辅存内容，写入到实存 */
@@ -389,6 +392,27 @@ void do_print_info()
 	}
 }
 
+/* 打印实存 */
+void do_print_actMem()
+{
+	unsigned int i,j;
+	printf("实存信息如下\n");
+	for(i = 0; i < 4; i++)
+		printf("地址:\t内容:\t");
+	printf("\n");
+	for(i = 0; i < 32; i++)
+	{
+		for(j = 0; j < 4; j++)
+		{
+			printf("%d\t%c\t",j*32+i,actMem[j*32+i]);
+		}
+		
+		printf("\n");
+	}
+}
+
+
+
 /* 获取页面保护类型字符串 */
 char *get_proType_str(char *str, BYTE type)
 {
@@ -430,7 +454,7 @@ void initFile(){
 	//Randomly generated 256 - bit string
 	fwrite(buffer, sizeof(BYTE),VIRTUAL_MEMORY_SIZE, temp);
 	
-	printf("System prompt: Initialization of auxiliary storage simulation file has been completed ");
+	printf("System prompt: Initialization of auxiliary memory simulation file has been completed ");
 	fclose(temp);
 }	
 
@@ -454,9 +478,11 @@ int main(int argc, char* argv[])
 	{
 		do_request();
 		do_response();
-		printf("按Y打印页表，按其他键不打印...\n");
+		printf("按Y打印页表，按A打印实存,按其他键不打印...\n");
 		if ((c = getchar()) == 'y' || c == 'Y')
 			do_print_info();
+		else if(c == 'a' || c == 'A')
+			do_print_actMem();
 		while (c != '\n')
 			c = getchar();
 		printf("按X退出程序，按其他键继续...\n");
