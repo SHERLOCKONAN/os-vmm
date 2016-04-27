@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <time.h>
 #include "vmm.h"
+//#include <errno.h>
 
 /* 页表 */
 PageTableItem pageTable[PAGE_SUM];
@@ -407,6 +408,32 @@ char *get_proType_str(char *str, BYTE type)
 	return str;
 }
 
+void initFile(){
+	int i;
+	char* key = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+	char buffer[VIRTUAL_MEMORY_SIZE + 1];
+	//errno_t err;
+	//err = fopen_s(&ptr_auxMem, AUXILIARY_MEMORY, "w+");
+	//fopen_s是WINDOWS 下广泛用的，window下任务printf，fopen， scanf 等不安全，在后面加了个_S
+
+	FILE *temp;
+	temp = fopen(AUXILIARY_MEMORY, "w+");
+	for(i = 0; i<VIRTUAL_MEMORY_SIZE-3; i++)
+	{
+		buffer[i] = key[rand() % 62];
+	}
+	buffer[VIRTUAL_MEMORY_SIZE - 3] = 'h';
+	buffer[VIRTUAL_MEMORY_SIZE - 2] = 'q';
+	buffer[VIRTUAL_MEMORY_SIZE - 1] = 'y';
+	buffer[VIRTUAL_MEMORY_SIZE] = '\0';
+	
+	//Randomly generated 256 - bit string
+	fwrite(buffer, sizeof(BYTE),VIRTUAL_MEMORY_SIZE, temp);
+	
+	printf("System prompt: Initialization of auxiliary storage simulation file has been completed ");
+	fclose(temp);
+}	
+
 int main(int argc, char* argv[])
 {
 	char c;
@@ -417,6 +444,8 @@ int main(int argc, char* argv[])
 		exit(1);
 	}
 	
+	initFile();
+
 	do_init();
 	do_print_info();
 	ptr_memAccReq = (Ptr_MemoryAccessRequest) malloc(sizeof(MemoryAccessRequest));

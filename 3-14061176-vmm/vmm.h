@@ -109,5 +109,7 @@ void do_print_info();
 /* 获取页面保护类型字符串 */
 char *get_proType_str(char *, BYTE);
 
+/*initial the auxiliary storage simulation file*/
+void initFile();
 
 #endif
