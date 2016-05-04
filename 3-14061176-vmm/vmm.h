@@ -56,6 +56,8 @@ typedef struct
 	unsigned long count; //页面使用计数器
 } PageTableItem, *Ptr_PageTableItem;
 
+typedef Ptr_PageTableItem PageTable[STAGE1_SIZE], *(pPageTable[STAGE1_SIZE]);
+
 /* 访存请求类型 */
 typedef enum { 
 	REQUEST_READ, 
