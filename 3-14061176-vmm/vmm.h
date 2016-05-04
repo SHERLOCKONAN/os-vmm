@@ -21,6 +21,9 @@
 /* 总物理块数 */
 #define BLOCK_SUM (ACTUAL_MEMORY_SIZE / PAGE_SIZE)
 
+#define STAGE1_SIZE 8
+#define STAGE2_SIZE (PAGE_SUM/SIAGE1_SIZE)
+
 
 /* 可读标识位 */
 #define READABLE 0x01u
