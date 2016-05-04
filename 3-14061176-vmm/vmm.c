@@ -5,7 +5,7 @@
 //#include <errno.h>
 
 /* 页表 */
-PageTableItem pageTable[PAGE_SUM];
+Ptr_PageTableItem pageTable;
 /* 实存空间 */
 BYTE actMem[ACTUAL_MEMORY_SIZE];
 /* 用文件模拟辅存空间 */
@@ -14,6 +14,8 @@ FILE *ptr_auxMem;
 BOOL blockStatus[BLOCK_SUM];
 /* 访存请求 */
 Ptr_MemoryAccessRequest ptr_memAccReq;
+
+Ptr_PageTableItem actMemInfo[BLOCK_SUM];
 
 #ifdef ORZ
 void do_init() {

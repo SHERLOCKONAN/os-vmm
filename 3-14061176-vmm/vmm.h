@@ -23,6 +23,7 @@
 
 #define STAGE1_SIZE 8
 #define STAGE2_SIZE (PAGE_SUM/SIAGE1_SIZE)
+#define PROCESS_NUM 16
 
 
 /* 可读标识位 */
