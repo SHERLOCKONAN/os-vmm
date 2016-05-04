@@ -22,7 +22,7 @@
 #define BLOCK_SUM (ACTUAL_MEMORY_SIZE / PAGE_SIZE)
 
 #define STAGE1_SIZE 8
-#define STAGE2_SIZE (PAGE_SUM/SIAGE1_SIZE)
+#define STAGE2_SIZE (PAGE_SUM/STAGE1_SIZE)
 #define PROCESS_NUM 16
 
 
@@ -107,10 +107,10 @@ void do_page_fault(Ptr_PageTableItem);
 void do_LFU(Ptr_PageTableItem);
 
 /* 装入页面 */
-void do_page_in(Ptr_PageTableItem, unsigned in);
+void do_page_in(Ptr_PageTableItem, unsigned int);
 
 /* 写出页面 */
-void do_page_out(Ptr_PageTableItem);
+int do_page_out(Ptr_PageTableItem);
 #else
 void do_request_sendback();
 void do_request_init();
