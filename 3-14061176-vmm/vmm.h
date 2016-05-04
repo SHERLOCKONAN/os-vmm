@@ -56,7 +56,8 @@ typedef struct
 typedef enum { 
 	REQUEST_READ, 
 	REQUEST_WRITE, 
-	REQUEST_EXECUTE 
+	REQUEST_EXECUTE,
+	REQUEST_SWITCH
 } MemoryAccessRequestType;
 
 /* 访存请求 */
@@ -65,6 +66,7 @@ typedef struct
 	MemoryAccessRequestType reqType; //访存请求类型
 	unsigned long virAddr; //虚地址
 	BYTE value; //写请求的值
+	long stat;
 } MemoryAccessRequest, *Ptr_MemoryAccessRequest;
 
 
@@ -88,6 +90,7 @@ void do_request();
 /* 响应访存请求 */
 void do_response();
 
+#ifndef ORZLIBO
 /* 处理缺页中断 */
 void do_page_fault(Ptr_PageTableItem);
 
@@ -99,7 +102,7 @@ void do_page_in(Ptr_PageTableItem, unsigned in);
 
 /* 写出页面 */
 void do_page_out(Ptr_PageTableItem);
-
+#endif
 /* 错误处理 */
 void do_error(ERROR_CODE);
 

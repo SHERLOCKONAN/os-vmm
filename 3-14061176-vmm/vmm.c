@@ -89,6 +89,7 @@ void do_init()
 
 
 /* 响应请求 */
+#ifndef ORZLIBO
 void do_response()
 {
 	Ptr_PageTableItem ptr_pageTabIt;
@@ -282,6 +283,7 @@ void do_page_out(Ptr_PageTableItem ptr_pageTabIt)
 	}
 	printf("写回成功：物理块%u-->>辅存地址%03X\n", ptr_pageTabIt->auxAddr, ptr_pageTabIt->blockNum);
 }
+#endif
 
 /* 错误处理 */
 void do_error(ERROR_CODE code)
@@ -345,6 +347,7 @@ void do_error(ERROR_CODE code)
 	}
 }
 
+#ifndef ORZLIBO
 /* 产生访存请求 */
 void do_request()
 {
@@ -377,6 +380,7 @@ void do_request()
 			break;
 	}	
 }
+#endif
 
 /* 打印页表 */
 void do_print_info()
@@ -478,6 +482,8 @@ int main(int argc, char* argv[])
 	{
 		do_request();
 		do_response();
+		do_request_sendback();
+#ifndef ORZLIBO
 		printf("按Y打印页表，按A打印实存,按其他键不打印...\n");
 		if ((c = getchar()) == 'y' || c == 'Y')
 			do_print_info();
@@ -490,6 +496,7 @@ int main(int argc, char* argv[])
 			break;
 		while (c != '\n')
 			c = getchar();
+#endif
 		//sleep(5000);
 	}
 
