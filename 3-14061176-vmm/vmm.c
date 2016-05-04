@@ -15,14 +15,14 @@ BOOL blockStatus[BLOCK_SUM];
 /* 访存请求 */
 Ptr_MemoryAccessRequest ptr_memAccReq;
 
-#ifdef ORZLIBO
+#ifdef ORZ
 void do_init() {
 	do_request_init();
 	do_response_init();
 }
 #endif
 
-#ifndef ORZLIBO
+#ifndef ORZ
 /* 初始化环境 */
 void do_init()
 {
@@ -95,7 +95,7 @@ void do_init()
 
 
 /* 响应请求 */
-//#ifndef ORZLIBO
+//#ifndef ORZ
 void do_response()
 {
 	Ptr_PageTableItem ptr_pageTabIt;
@@ -353,7 +353,7 @@ void do_error(ERROR_CODE code)
 	}
 }
 
-#ifndef ORZLIBO
+#ifndef ORZ
 /* 产生访存请求 */
 void do_request()
 {
@@ -477,11 +477,11 @@ int main(int argc, char* argv[])
 		do_error(ERROR_FILE_OPEN_FAILED);
 		exit(1);
 	}
-#ifndef ORZLIBO	
+#ifndef ORZ	
 	initFile();
 #endif
 	do_init();
-#ifndef ORZLIBO
+#ifndef ORZ
 	do_print_info();
 #endif
 	ptr_memAccReq = (Ptr_MemoryAccessRequest) malloc(sizeof(MemoryAccessRequest));
@@ -491,7 +491,7 @@ int main(int argc, char* argv[])
 		do_request();
 		do_response();
 		do_request_sendback();
-#ifndef ORZLIBO
+#ifndef ORZ
 		printf("按Y打印页表，按A打印实存,按其他键不打印...\n");
 		if ((c = getchar()) == 'y' || c == 'Y')
 			do_print_info();

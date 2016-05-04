@@ -90,7 +90,7 @@ void do_request();
 /* 响应访存请求 */
 void do_response();
 
-#ifndef ORZLIBO
+#ifndef ORZ
 /* 处理缺页中断 */
 void do_page_fault(Ptr_PageTableItem);
 
