@@ -15,8 +15,14 @@ BOOL blockStatus[BLOCK_SUM];
 /* 访存请求 */
 Ptr_MemoryAccessRequest ptr_memAccReq;
 
+#ifdef ORZLIBO
+void do_init() {
+	do_request_init();
+	do_response_init();
+}
+#endif
 
-
+#ifndef ORZLIBO
 /* 初始化环境 */
 void do_init()
 {
@@ -89,7 +95,7 @@ void do_init()
 
 
 /* 响应请求 */
-#ifndef ORZLIBO
+//#ifndef ORZLIBO
 void do_response()
 {
 	Ptr_PageTableItem ptr_pageTabIt;
@@ -471,11 +477,13 @@ int main(int argc, char* argv[])
 		do_error(ERROR_FILE_OPEN_FAILED);
 		exit(1);
 	}
-	
+#ifndef ORZLIBO	
 	initFile();
-
+#endif
 	do_init();
+#ifndef ORZLIBO
 	do_print_info();
+#endif
 	ptr_memAccReq = (Ptr_MemoryAccessRequest) malloc(sizeof(MemoryAccessRequest));
 	/* 在循环中模拟访存请求与处理过程 */
 	while (TRUE)

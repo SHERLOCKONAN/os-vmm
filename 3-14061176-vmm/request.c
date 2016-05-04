@@ -1,5 +1,8 @@
 #include "vmm.h"
 
+void do_request_init() {
+}
+
 void do_request() {
 }
 

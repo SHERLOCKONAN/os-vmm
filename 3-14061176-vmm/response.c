@@ -1,8 +1,7 @@
 #include "vmm.h"
 
-#ifdef ORZLIBO
+void do_response_init() {
+}
 
 void do_response() {
 }
-
-#endif

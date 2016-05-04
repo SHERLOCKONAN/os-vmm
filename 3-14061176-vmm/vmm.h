@@ -102,6 +102,10 @@ void do_page_in(Ptr_PageTableItem, unsigned in);
 
 /* 写出页面 */
 void do_page_out(Ptr_PageTableItem);
+#else
+void do_request_sendback();
+void do_request_init();
+void do_response_init();
 #endif
 /* 错误处理 */
 void do_error(ERROR_CODE);
