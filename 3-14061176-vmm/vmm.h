@@ -9,12 +9,13 @@
 
 /* 模拟辅存的文件路径 */
 #define AUXILIARY_MEMORY "vmm_auxMem"
-
+#define FIFO_FILE "/tmp/server"
+#define FIFO_FILE_OUT "/tmp/server2"
 /* 页面大小（字节）*/
 #define PAGE_SIZE 4
 /* 虚存空间大小（字节） */
 #define VIRTUAL_MEMORY_SIZE (64 * 4)
-/* 实存空间大小（字节） */ 
+/* 实存空间大小（字节） */
 #define ACTUAL_MEMORY_SIZE (32 * 4)
 /* 总虚页数 */
 #define PAGE_SUM (VIRTUAL_MEMORY_SIZE / PAGE_SIZE)
@@ -59,9 +60,9 @@ typedef struct
 typedef Ptr_PageTableItem PageTable[STAGE1_SIZE], *(pPageTable[STAGE1_SIZE]);
 
 /* 访存请求类型 */
-typedef enum { 
-	REQUEST_READ, 
-	REQUEST_WRITE, 
+typedef enum {
+	REQUEST_READ,
+	REQUEST_WRITE,
 	REQUEST_EXECUTE,
 	REQUEST_SWITCH,
 	REQUEST_EXIT,
