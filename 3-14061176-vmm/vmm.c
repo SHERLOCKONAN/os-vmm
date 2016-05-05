@@ -5,11 +5,8 @@
 //#include <errno.h>
 
 /* 页表 */
-#ifndef ORZ
-Ptr_PageTableItem pageTable;
-#else
-pPageTable pageTable;
-#endif
+PageTableItem pageTable[PROCESS_NUM][STAGE1_SIZE][STAGE2_SIZE];
+
 /* 实存空间 */
 BYTE actMem[ACTUAL_MEMORY_SIZE];
 /* 用文件模拟辅存空间 */
@@ -32,66 +29,77 @@ void do_init() {
 /* 初始化环境 */
 void do_init()
 {
-	int i, j;
+	int i, j, row, cul, t;
 	srandom(time(NULL));
-	for (i = 0; i < PAGE_SUM; i++)
+	for (t = 0; t < PROCESS_NUM; t++)
 	{
-		pageTable[i].pageNum = i;
-		pageTable[i].filled = FALSE;
-		pageTable[i].edited = FALSE;
-		pageTable[i].count = 0;
-		/* 使用随机数设置该页的保护类型 */
-		switch (random() % 7)
+		for (i = 0; i < STAGE1_SIZE; i++)
 		{
-			case 0:
+			for(j = 0; j < STAGE2_SIZE; j++)
 			{
-				pageTable[i].proType = READABLE;
-				break;
+				pageTable[t][i][j].pageNum = i*STAGE1_SIZE + j;
+				pageTable[t][i][j].filled = FALSE;
+				pageTable[t][i][j].edited = FALSE;
+				pageTable[t][i][j].count = 0;
+				/* 使用随机数设置该页的保护类型 */
+				switch (random() % 7)
+				{
+					case 0:
+					{
+						pageTable[t][i][j].proType = READABLE;
+						break;
+					}
+					case 1:
+					{
+						pageTable[t][i][j].proType = WRITABLE;
+						break;
+					}
+					case 2:
+					{
+						pageTable[t][i][j].proType = EXECUTABLE;
+						break;
+					}
+					case 3:
+					{
+						pageTable[t][i][j].proType = READABLE | WRITABLE;
+						break;
+					}
+					case 4:
+					{
+						pageTable[t][i][j].proType = READABLE | EXECUTABLE;
+						break;
+					}
+					case 5:
+					{
+						pageTable[t][i][j].proType = WRITABLE | EXECUTABLE;
+						break;
+					}
+					case 6:
+					{
+						pageTable[t][i][j].proType = READABLE | WRITABLE | EXECUTABLE;
+						break;
+					}
+					default:
+						break;
+				}
+				/* 设置该页对应的辅存地址 */
+				pageTable[t][i][j].auxAddr = (i*STAGE1_SIZE + j) * PAGE_SIZE * 2;
+
 			}
-			case 1:
-			{
-				pageTable[i].proType = WRITABLE;
-				break;
-			}
-			case 2:
-			{
-				pageTable[i].proType = EXECUTABLE;
-				break;
-			}
-			case 3:
-			{
-				pageTable[i].proType = READABLE | WRITABLE;
-				break;
-			}
-			case 4:
-			{
-				pageTable[i].proType = READABLE | EXECUTABLE;
-				break;
-			}
-			case 5:
-			{
-				pageTable[i].proType = WRITABLE | EXECUTABLE;
-				break;
-			}
-			case 6:
-			{
-				pageTable[i].proType = READABLE | WRITABLE | EXECUTABLE;
-				break;
-			}
-			default:
-				break;
+		
 		}
-		/* 设置该页对应的辅存地址 */
-		pageTable[i].auxAddr = i * PAGE_SIZE * 2;
 	}
+	
 	for (j = 0; j < BLOCK_SUM; j++)
 	{
 		/* 随机选择一些物理块进行页面装入 */
+		row = j/STAGE2_SIZE;
+		cul = j%STAGE2_SIZE;
 		if (random() % 2 == 0)
 		{
-			do_page_in(&pageTable[j], j);
-			pageTable[j].blockNum = j;
-			pageTable[j].filled = TRUE;
+			do_page_in(&pageTable[0][row][cul], j);
+			pageTable[0][row][cul].blockNum = j;
+			pageTable[0][row][cul].filled = TRUE;
 			blockStatus[j] = TRUE;
 		}
 		else
