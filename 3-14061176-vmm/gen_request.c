@@ -28,7 +28,6 @@ void send(){
 
 void recieve(){
     int fd;
-    int stat;
     if (stat(FIFO_FILE, &statbuf) == 0){
         if (remove(FIFO_FILE_OUT) < 0)
             error_sys("remove failed");
@@ -43,7 +42,6 @@ void recieve(){
     if (read(fd,&request,sizeof(MemoryAccessRequest)) < 0)
         error_sys("read failed");
     close(fd);
-    return stat;
 }
 
 void request_read(){
