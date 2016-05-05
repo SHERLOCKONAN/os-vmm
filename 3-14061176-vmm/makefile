@@ -3,3 +3,4 @@ vmm: vmm.c vmm.h request.c response.c error.c request
 request: gen_request.c error.c
 	cc -g -o request gen_request.c error.c
 clean:
+	rm vmm request
