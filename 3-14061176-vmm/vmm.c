@@ -18,14 +18,6 @@ Ptr_MemoryAccessRequest ptr_memAccReq;
 
 Ptr_PageTableItem actMemInfo[BLOCK_SUM];
 
-#ifdef ORZ
-void do_init() {
-	do_request_init();
-	do_response_init();
-}
-#endif
-
-#ifndef ORZ
 /* 初始化环境 */
 void do_init()
 {
@@ -105,8 +97,8 @@ void do_init()
 		else
 			blockStatus[j] = FALSE;
 	}
+	do_request_init();
 }
-#endif
 
 /* 响应请求 */
 //#ifndef ORZ
@@ -246,24 +238,25 @@ void do_page_fault(Ptr_PageTableItem ptr_pageTabIt)
 //	for (i = 0, min = 0xFFFFFFFF, page = 0; i < PAGE_SUM; i++)
 	for(i=0,min=-1,page=0;i<BLOCK_SUM;++i)
 	{
-		if (/*pageTable*/actMemInfo[i].count < min)
+		if (/*pageTable*/actMemInfo[i]->count < min)
 		{
-			min = pageTable[i].count;
+			min = actMemInfo[i]->count;
 			page = i;
 		}
 	}
 	printf("选择第%u页进行替换\n", page);
-	if (/*pageTable*/actMemInfo[page].edited)
+	if (/*pageTable*/actMemInfo[page]->edited)
 	{
 		/* 页面内容有修改，需要写回至辅存 */
 		printf("该页内容有修改，写回至辅存\n");
-		do_page_out(&/*pageTable*/actMemInfo[page]);
+		do_page_out(/*pageTable*/actMemInfo[page]);
 	}
-	/*pageTable[page]*/actMemInfo.filled = FALSE;
-	/*pageTable[page]*/actMemInfo.count = 0;
+	/*pageTable[page]*/actMemInfo[page]->filled = FALSE;
+	/*pageTable[page]*/actMemInfo[page]->count = 0;
 
 
 	return page;
+#if 0
 	/* 读辅存内容，写入到实存 */
 	do_page_in(ptr_pageTabIt, /*pageTable[page].blockNum*/page);
 	
@@ -273,6 +266,7 @@ void do_page_fault(Ptr_PageTableItem ptr_pageTabIt)
 	ptr_pageTabIt->edited = FALSE;
 	ptr_pageTabIt->count = 0;
 	printf("页面替换成功\n");
+#endif
 }
 
 /* 将辅存内容写入实存 */

@@ -10,6 +10,3 @@ extern Ptr_PageTableItem actMemInfo[BLOCK_SUM];
 
 void do_response_init() {
 }
-
-void do_response() {
-}

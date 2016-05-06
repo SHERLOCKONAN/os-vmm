@@ -100,23 +100,23 @@ void do_request();
 /* 响应访存请求 */
 void do_response();
 
-#ifndef ORZ
+//#ifndef ORZ
 /* 处理缺页中断 */
 void do_page_fault(Ptr_PageTableItem);
 
 /* LFU页面替换 */
-void do_LFU(Ptr_PageTableItem);
+unsigned int do_LFU(Ptr_PageTableItem);
 
 /* 装入页面 */
 void do_page_in(Ptr_PageTableItem, unsigned int);
 
 /* 写出页面 */
-int do_page_out(Ptr_PageTableItem);
-#else
+void do_page_out(Ptr_PageTableItem);
+//#else
 void do_request_sendback();
 void do_request_init();
 void do_response_init();
-#endif
+//#endif
 /* 错误处理 */
 void do_error(ERROR_CODE);
 
