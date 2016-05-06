@@ -222,6 +222,47 @@ void do_rand(int num)
 	}
 }
 
+void do_reqs(cmd* command)
+{
+	int i,k=0;
+	printf("create reqs in range(%u, %u)\n", command->value,command->value2);
+	ptr_memAccReq->pid=getpid();
+	for (i=command->value;i<=command->value2;++i)
+	{
+		/* 随机产生请求地址 */
+		ptr_memAccReq->virAddr = i;
+		/* 随机产生请求类型 */
+		switch (command->cmdtype)
+		{
+			case READR: //读请求
+			{
+				ptr_memAccReq->reqType = REQUEST_READ;
+				break;
+			}
+			// case 1: //写请求
+			// {
+			// 	ptr_memAccReq->reqType = REQUEST_WRITE;
+			// 	/* 随机产生待写入的值 */
+			// 	ptr_memAccReq->value = random() % 0xFFu;
+			// 	break;
+			// }
+			// case 2:
+			// {
+			// 	ptr_memAccReq->reqType = REQUEST_EXECUTE;
+			// 	break;
+			// }
+			default:
+				break;
+		}
+		//sleep(0.1);
+		k=do_request_k();
+		if (k>=0)
+		{
+			printf("return: %02X\n", (BYTE)k);
+		}
+	}
+}
+
 void usage()
 {
 	printf("pid: %d\n",getpid());
@@ -257,6 +298,16 @@ int readcmd(cmd* t)
 		u=atoi(statbuf);
 		t->cmdtype=RAND;
 		t->value=u;
+		return 1;
+	}
+	if (strcmp(statbuf,"readr")==0)
+	{
+		scanf("%s",statbuf);
+		u=atoi(statbuf);
+		scanf("%s",statbuf);
+		t->cmdtype=READR;
+		t->value=u;
+		t->value2=atoi(statbuf);
 		return 1;
 	}
 	if (strcmp(statbuf,"read")==0)
@@ -320,6 +371,9 @@ int main(int argc, char* argv[])
 				break;
 			case RAND:
 				do_rand(command->value);
+				break;
+			case READR:
+				do_reqs(command);
 				break;
 			case REQUEST:
 				res=do_request(command->mart,command->vaddr,command->value);

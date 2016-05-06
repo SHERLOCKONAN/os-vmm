@@ -14,6 +14,7 @@ typedef enum {
 	USAGE,
 	STAT,
 	RAND, 
+	READR, 
 	REQUEST
 } cmdType;
 
@@ -24,6 +25,7 @@ typedef struct
 	MemoryAccessRequestType mart;
 	unsigned int vaddr;
 	BYTE value;
+	BYTE value2;
 } cmd;
 
 void usage();

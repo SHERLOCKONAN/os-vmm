@@ -1,3 +1,4 @@
+#include <time.h>
 #include "vm.h"
 #ifndef VMM_H
 #define VMM_H
@@ -18,6 +19,7 @@ typedef struct
 	BOOL edited; //页面修改标识
 	unsigned int auxAddr; //外存地址
 	unsigned int count; //页面使用计数器
+	clock_t time_now;	//最后访问时间
 } PageTableItem, *Ptr_PageTableItem;
 
 /* 页表目录项 */
@@ -51,6 +53,9 @@ void do_page_fault(Ptr_PageTableItem, Ptr_MemoryAccessRequest ptr);
 
 /* LFU页面替换 */
 void do_LFU(Ptr_PageTableItem, Ptr_MemoryAccessRequest req);
+
+/* LRU页面替换 */
+void do_LRU(Ptr_PageTableItem, Ptr_MemoryAccessRequest req);
 
 /* 装入页面 */
 void do_page_in(Ptr_PageTableItem, unsigned in);

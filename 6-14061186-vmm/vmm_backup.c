@@ -7,12 +7,10 @@
 #include <sys/ipc.h>
 #include <fcntl.h>
 #include <signal.h>
+#include <time.h>
 #include "fifosr.h"
 #include "vmm.h"
 
-#define MOD_LRU
-//#define MOD_LFU
- //#define CLOCKS_PER_SEC   ((clock_t)1000) 
 /* process页表 */
 
 Ptr_ProcessItem process[PROC_MAXN];
@@ -68,7 +66,6 @@ void do_init(int auxID, Ptr_PageTableItem pageTable)
 		pageTable[i].filled = FALSE;
 		pageTable[i].edited = FALSE;
 		pageTable[i].count = 0;
-		pageTable[i].time_now = 0;
 		/* 使用随机数设置该页的保护类型 */
 
 		pageTable[i].proType=(BYTE)(random()%7+1);
@@ -151,7 +148,6 @@ Ptr_PageTableItem getPageItem_m(int pid, unsigned int idx1, unsigned int idx2, u
 			pageTable2[idx2]->paget[i].filled = FALSE;
 			pageTable2[idx2]->paget[i].edited = FALSE;
 			pageTable2[idx2]->paget[i].count = 0;
-			pageTable2[idx2]->paget[i].time_now = 0;
 			/* 使用随机数设置该页的保护类型 */
 
 			pageTable2[idx2]->paget[i].proType=(BYTE)(random()%7+1);
@@ -294,12 +290,7 @@ void do_response_m()
 	{
 		case REQUEST_READ: //读请求
 		{
-			#ifdef MOD_LRU
-				ptr_pageTabIt->time_now  = clock();
-			#endif
-			#ifdef MOD_LFU
-				ptr_pageTabIt->count++;
-			#endif
+			ptr_pageTabIt->count++;
 			if (!(ptr_pageTabIt->proType & READABLE)) //页面不可读
 			{
 				do_error(ERROR_READ_DENY);
@@ -314,12 +305,7 @@ void do_response_m()
 		}
 		case REQUEST_WRITE: //写请求
 		{
-			#ifdef MOD_LRU
-				ptr_pageTabIt->time_now  = clock();
-			#endif
-			#ifdef MOD_LFU
-				ptr_pageTabIt->count++;
-			#endif
+			ptr_pageTabIt->count++;
 			if (!(ptr_pageTabIt->proType & WRITABLE)) //页面不可写
 			{
 				do_error(ERROR_WRITE_DENY);	
@@ -335,12 +321,7 @@ void do_response_m()
 		}
 		case REQUEST_EXECUTE: //执行请求
 		{
-			#ifdef MOD_LRU
-				ptr_pageTabIt->time_now  = clock();
-			#endif
-			#ifdef MOD_LFU
-				ptr_pageTabIt->count++;
-			#endif
+			ptr_pageTabIt->count++;
 			if (!(ptr_pageTabIt->proType & EXECUTABLE)) //页面不可执行
 			{
 				do_error(ERROR_EXECUTE_DENY);
@@ -377,7 +358,6 @@ void do_page_fault(Ptr_PageTableItem ptr_pageTabIt, Ptr_MemoryAccessRequest ptr)
 			ptr_pageTabIt->filled = TRUE;
 			ptr_pageTabIt->edited = FALSE;
 			ptr_pageTabIt->count = 0;
-			ptr_pageTabIt->time_now = 0;
 			blockVaddr[i]=ptr->virAddr;
 			blockPid[i]=ptr->pid;
 			blockStatus[i] = TRUE;
@@ -385,12 +365,7 @@ void do_page_fault(Ptr_PageTableItem ptr_pageTabIt, Ptr_MemoryAccessRequest ptr)
 		}
 	}
 	/* 没有空闲物理块，进行页面替换 */
-	#ifdef MOD_LRU
-		do_LRU(ptr_pageTabIt,ptr);
-	#endif
-	#ifdef MOD_LFU
-		do_LFU(ptr_pageTabIt,ptr);
-	#endif
+	do_LFU(ptr_pageTabIt,ptr);
 }
 
 /* 根据LFU算法进行页面替换 */
@@ -443,86 +418,6 @@ void do_LFU(Ptr_PageTableItem ptr_pageTabIt,Ptr_MemoryAccessRequest req)
 	ptr_pageTabIt->filled = TRUE;
 	ptr_pageTabIt->edited = FALSE;
 	ptr_pageTabIt->count = 0;
-	blockVaddr[block]=req->virAddr;
-	blockPid[block]=req->pid;
-	printf("页面替换成功\n");
-}
-
-/*LRU*/
-void do_support_LRU()
-{
-	unsigned int i, min, block;
-	unsigned int idx1, idx2, pageNum, offAddr;
-	Ptr_PageTableItem ptr, ptr2;
-	for (i = 0,block = 0; i < BLOCK_SUM; i++)
-	if (blockStatus[i])
-	{
-		//ptr=getPageItem(blockPid[i],blockVaddr[i]);
-		//singlePage
-
-		offAddr = blockVaddr[i];
-		idx1 = (offAddr & ((IDX1_SUM-1)<<IDX1_LEN) )>>IDX1_LEN;
-		idx2 = (offAddr & ((IDX2_SUM-1)<<IDX2_LEN) )>>IDX2_LEN;
-		pageNum = (offAddr & ((ITEM_SUM-1)<<PAGE_LEN) )>>PAGE_LEN;
-
-		ptr=getPageItem_m(blockPid[i],idx1,idx2,pageNum);
-		//multiplyPage
-		// printf("%d %d\n", blockPid[i],blockVaddr[i]/PAGE_SIZE);
-		// printf("%d %d\n", ptr->blockNum,ptr->filled);
-		ptr->time_now = 0;
-	}
-}
-
-void do_LRU(Ptr_PageTableItem ptr_pageTabIt,Ptr_MemoryAccessRequest req)
-{
-	clock_t min;
-	unsigned int i, block;
-	unsigned int idx1, idx2, pageNum, offAddr;
-	Ptr_PageTableItem ptr, ptr2;
-	printf("没有空闲物理块，开始进行LRU页面替换...\n");
-	for (i = 0, min = clock(), block = 0; i < BLOCK_SUM; i++)
-	if (blockStatus[i])
-	{
-		//ptr=getPageItem(blockPid[i],blockVaddr[i]);
-		//singlePage
-
-		offAddr = blockVaddr[i];
-		idx1 = (offAddr & ((IDX1_SUM-1)<<IDX1_LEN) )>>IDX1_LEN;
-		idx2 = (offAddr & ((IDX2_SUM-1)<<IDX2_LEN) )>>IDX2_LEN;
-		pageNum = (offAddr & ((ITEM_SUM-1)<<PAGE_LEN) )>>PAGE_LEN;
-
-		ptr=getPageItem_m(blockPid[i],idx1,idx2,pageNum);
-		//multiplyPage
-		// printf("%d %d\n", blockPid[i],blockVaddr[i]/PAGE_SIZE);
-		// printf("%d %d\n", ptr->blockNum,ptr->filled);
-		if (ptr->time_now < min && ptr->filled)
-		{
-//			printf("%d\n",i); 
-			min = ptr->time_now;
-			block = i;
-			ptr2 = ptr;
-		}
-	}
-	printf("选择第%ublock进行替换\n", block);
-	//if (ptr2==NULL) printf("NULL\n");
-	if (ptr2->edited)
-	{
-		/* 页面内容有修改，需要写回至辅存 */
-		printf("该页内容有修改，写回至辅存\n");
-		do_page_out(ptr2);
-	}
-	ptr2->filled = FALSE;
-	ptr2->time_now= (clock_t)0;
-
-
-	/* 读辅存内容，写入到实存 */
-	do_page_in(ptr_pageTabIt, block);
-	
-	/* 更新页表内容 */
-	ptr_pageTabIt->blockNum = block;
-	ptr_pageTabIt->filled = TRUE;
-	ptr_pageTabIt->edited = FALSE;
-	ptr_pageTabIt->time_now = (clock_t)0;
 	blockVaddr[block]=req->virAddr;
 	blockPid[block]=req->pid;
 	printf("页面替换成功\n");
@@ -623,16 +518,9 @@ int getItemInfo(int id, Ptr_PageTableItem ptr, char *buf)
 			FALSE, get_proType_str(str, 0x00u), 
 			0, 0);
 	else
-		#ifdef MOD_LRU
-			return sprintf(buf,"%u\t%u\t%u\t%u\t%s\t%u\t%u\n", id, ptr->blockNum, ptr->filled, 
-			ptr->edited, get_proType_str(str, ptr->proType), 
-			ptr->time_now, ptr->auxAddr);
-		#endif
-		#ifdef MOD_LFU
-			return sprintf(buf,"%u\t%u\t%u\t%u\t%s\t%u\t%u\n", id, ptr->blockNum, ptr->filled, 
+		return sprintf(buf,"%u\t%u\t%u\t%u\t%s\t%u\t%u\n", id, ptr->blockNum, ptr->filled, 
 			ptr->edited, get_proType_str(str, ptr->proType), 
 			ptr->count, ptr->auxAddr);
-		#endif		
 }
 
 int getPageInfo2(int x, Ptr_Index1Item ptr, char *buf)
@@ -957,10 +845,6 @@ int main(int argc, char* argv[])
 	/* 在循环中模拟访存请求与处理过程 */
 	while (TRUE)
 	{
-		#ifdef MOD_LRU
-			signal(SIGALRM,do_support_LRU);
-			alarm(1000);
-		#endif
 		switch (getReq())
 		{
 			case 'e':
