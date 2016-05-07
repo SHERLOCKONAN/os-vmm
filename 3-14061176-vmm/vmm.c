@@ -3,9 +3,12 @@
 #include <time.h>
 #include "vmm.h"
 //#include <errno.h>
-
+FILE *aux;
+char s[4100];
 /* 页表 */
-PageTableItem pageTable[PROCESS_NUM][STAGE1_SIZE][STAGE2_SIZE];
+PageTableItem fullpageTable[PROCESS_NUM][STAGE1_SIZE][STAGE2_SIZE];
+PageTableItem (*pageTable)[8][8];
+//PageTableItem fullpageTable;
 
 /* 实存空间 */
 BYTE actMem[ACTUAL_MEMORY_SIZE];
@@ -18,6 +21,7 @@ Ptr_MemoryAccessRequest ptr_memAccReq;
 
 Ptr_PageTableItem actMemInfo[BLOCK_SUM];
 
+int last_time;
 /* 初始化环境 */
 void do_init()
 {
@@ -29,59 +33,61 @@ void do_init()
 		{
 			for(j = 0; j < STAGE2_SIZE; j++)
 			{
-				pageTable[t][i][j].pageNum = i*STAGE1_SIZE + j;
-				pageTable[t][i][j].filled = FALSE;
-				pageTable[t][i][j].edited = FALSE;
-				pageTable[t][i][j].count = 0;
+				fullpageTable[t][i][j].pageNum = i*STAGE1_SIZE + j;
+				fullpageTable[t][i][j].filled = FALSE;
+				fullpageTable[t][i][j].edited = FALSE;
+				fullpageTable[t][i][j].count = 0;
 				/* 使用随机数设置该页的保护类型 */
 				switch (random() % 7)
 				{
 					case 0:
 					{
-						pageTable[t][i][j].proType = READABLE;
+						fullpageTable[t][i][j].proType = READABLE;
 						break;
 					}
 					case 1:
 					{
-						pageTable[t][i][j].proType = WRITABLE;
+						fullpageTable[t][i][j].proType = WRITABLE;
 						break;
 					}
 					case 2:
 					{
-						pageTable[t][i][j].proType = EXECUTABLE;
+						fullpageTable[t][i][j].proType = EXECUTABLE;
 						break;
 					}
 					case 3:
 					{
-						pageTable[t][i][j].proType = READABLE | WRITABLE;
+						fullpageTable[t][i][j].proType = READABLE | WRITABLE;
 						break;
 					}
 					case 4:
 					{
-						pageTable[t][i][j].proType = READABLE | EXECUTABLE;
+						fullpageTable[t][i][j].proType = READABLE | EXECUTABLE;
 						break;
 					}
 					case 5:
 					{
-						pageTable[t][i][j].proType = WRITABLE | EXECUTABLE;
+						fullpageTable[t][i][j].proType = WRITABLE | EXECUTABLE;
 						break;
 					}
 					case 6:
 					{
-						pageTable[t][i][j].proType = READABLE | WRITABLE | EXECUTABLE;
+						fullpageTable[t][i][j].proType = READABLE | WRITABLE | EXECUTABLE;
 						break;
 					}
 					default:
 						break;
 				}
 				/* 设置该页对应的辅存地址 */
-				pageTable[t][i][j].auxAddr = (i*STAGE1_SIZE + j) * PAGE_SIZE * 2;
+				fullpageTable[t][i][j].auxAddr = (t*PAGE_SUM+i*STAGE1_SIZE + j) * PAGE_SIZE;
 
 			}
-		
+
 		}
 	}
-	
+
+	pageTable=fullpageTable;
+
 	for (j = 0; j < BLOCK_SUM; j++)
 	{
 		/* 随机选择一些物理块进行页面装入 */
@@ -98,13 +104,17 @@ void do_init()
 			blockStatus[j] = FALSE;
 	}
 	do_request_init();
+	last_time = 1;
 }
 
 /* 响应请求 */
 //#ifndef ORZ
 
 void do_switch() {
+	printf("switching to process(pid=%d)\n",ptr_memAccReq->value);
+	pageTable=&(fullpageTable[ptr_memAccReq->value]);
 }
+
 void do_response()
 {
 	Ptr_PageTableItem ptr_pageTabIt;
@@ -114,19 +124,19 @@ void do_response()
 	if(ptr_memAccReq->reqType==REQUEST_SWITCH) {
 		do_switch();
 		return;
-	}	
+	}
 	/* 检查地址是否越界 */
 	if (ptr_memAccReq->virAddr < 0 || ptr_memAccReq->virAddr >= VIRTUAL_MEMORY_SIZE)
 	{
 		do_error(ERROR_OVER_BOUNDARY);
 		return;
 	}
-	
+
 	/* 计算页号和页内偏移值 */
 	//I'm drunk......我也是醉了.....
 	/* pageTable[i].auxAddr = i * PAGE_SIZE * 2;so i = auxAddr or virAddr / (PAGE_SIZE * 2)*/
-	pageNum = ptr_memAccReq->virAddr / (PAGE_SIZE*2);
-	offAddr = ptr_memAccReq->virAddr % (PAGE_SIZE*2);
+	pageNum = ptr_memAccReq->virAddr / (PAGE_SIZE);
+	offAddr = ptr_memAccReq->virAddr % (PAGE_SIZE);
 	printf("页号为：%u\t页内偏移为：%u\n", pageNum, offAddr);
 
 	/* 获取对应页表项 */
@@ -135,22 +145,22 @@ void do_response()
 #else
 	ptr_pageTabIt = (*pageTable)[pageNum/STAGE1_SIZE]+pageNum%STAGE1_SIZE;
 #endif
-	
+
 	/* 根据特征位决定是否产生缺页中断 */
 	if (!ptr_pageTabIt->filled)
 	{
 		do_page_fault(ptr_pageTabIt);
 	}
-	
+
 	actAddr = ptr_pageTabIt->blockNum * PAGE_SIZE + offAddr;
 	printf("实地址为：%u\n", actAddr);
-	
+
 	/* 检查页面访问权限并处理访存请求 */
 	switch (ptr_memAccReq->reqType)
 	{
 		case REQUEST_READ: //读请求
 		{
-			ptr_pageTabIt->count++;
+			ptr_pageTabIt->count = last_time ++;
 			if (!(ptr_pageTabIt->proType & READABLE)) //页面不可读
 			{
 				do_error(ERROR_READ_DENY);
@@ -158,35 +168,42 @@ void do_response()
 			}
 			/* 读取实存中的内容 */
 			printf("读操作成功：值为%02X\n", actMem[actAddr]);
+			ptr_memAccReq->value=actMem[actAddr];
 			break;
 		}
 		case REQUEST_WRITE: //写请求
 		{
-			ptr_pageTabIt->count++;
+			ptr_pageTabIt->count = last_time ++;
 			if (!(ptr_pageTabIt->proType & WRITABLE)) //页面不可写
 			{
-				do_error(ERROR_WRITE_DENY);	
+				do_error(ERROR_WRITE_DENY);
 				return;
 			}
 			/* 向实存中写入请求的内容 */
 			actMem[actAddr] = ptr_memAccReq->value;
-			ptr_pageTabIt->edited = TRUE;			
+			ptr_pageTabIt->edited = TRUE;
 			printf("写操作成功\n");
 			break;
 		}
 		case REQUEST_EXECUTE: //执行请求
 		{
-			ptr_pageTabIt->count++;
+			ptr_pageTabIt->count = last_time ++;
 			if (!(ptr_pageTabIt->proType & EXECUTABLE)) //页面不可执行
 			{
 				do_error(ERROR_EXECUTE_DENY);
 				return;
-			}			
+			}
 			printf("执行成功\n");
 			break;
 		}
+		case REQUEST_OUTPUT_MEM: do_print_actMem();
+			break;
+		case REQUEST_OUTPUT_PAGETABLE: do_print_info();
+			break;
+		case REQUEST_OUTPUT_AUXMEM : do_print_auxMem();
+			break;
 		default: //非法请求类型
-		{	
+		{
 			do_error(ERROR_INVALID_REQUEST);
 			return;
 		}
@@ -207,27 +224,27 @@ void do_page_fault(Ptr_PageTableItem ptr_pageTabIt)
 			target=i; break;
 			/* 读辅存内容，写入到实存 */
 			do_page_in(ptr_pageTabIt, i);
-			
+
 			/* 更新页表内容 */
 			ptr_pageTabIt->blockNum = i;
 			ptr_pageTabIt->filled = TRUE;
 			ptr_pageTabIt->edited = FALSE;
 			ptr_pageTabIt->count = 0;
-			
+
 			blockStatus[i] = TRUE;
 			return;
 		}
 	}
 	/* 没有空闲物理块，进行页面替换 */
 	if(!~target) target=do_LFU(ptr_pageTabIt);
-	
+
 	do_page_in(ptr_pageTabIt,target);
 	ptr_pageTabIt->blockNum=target;
 	ptr_pageTabIt->filled=TRUE;
 	ptr_pageTabIt->edited=FALSE;
 	ptr_pageTabIt->count=0;
 	blockStatus[target]=TRUE;
-	actMemInfo[target]=ptr_pageTabIt;
+	//actMemInfo[target]=ptr_pageTabIt;
 }
 
 /* 根据LFU算法进行页面替换 */
@@ -259,7 +276,7 @@ void do_page_fault(Ptr_PageTableItem ptr_pageTabIt)
 #if 0
 	/* 读辅存内容，写入到实存 */
 	do_page_in(ptr_pageTabIt, /*pageTable[page].blockNum*/page);
-	
+
 	/* 更新页表内容 */
 	ptr_pageTabIt->blockNum = pageTable[page].blockNum;
 	ptr_pageTabIt->filled = TRUE;
@@ -281,7 +298,7 @@ void do_page_in(Ptr_PageTableItem ptr_pageTabIt, unsigned int blockNum)
 		do_error(ERROR_FILE_SEEK_FAILED);
 		exit(1);
 	}
-	if ((readNum = fread(actMem + blockNum * PAGE_SIZE, 
+	if ((readNum = fread(actMem + blockNum * PAGE_SIZE,
 		sizeof(BYTE), PAGE_SIZE, ptr_auxMem)) < PAGE_SIZE)
 	{
 #ifdef DEBUG
@@ -292,7 +309,7 @@ void do_page_in(Ptr_PageTableItem ptr_pageTabIt, unsigned int blockNum)
 		do_error(ERROR_FILE_READ_FAILED);
 		exit(1);
 	}
-	//actMemInfo[blockNum]=ptr_pageTabIt;
+	actMemInfo[blockNum]=ptr_pageTabIt;
 	printf("调页成功：辅存地址%u-->>物理块%u\n", ptr_pageTabIt->auxAddr, blockNum);
 }
 
@@ -308,7 +325,7 @@ void do_page_out(Ptr_PageTableItem ptr_pageTabIt)
 		do_error(ERROR_FILE_SEEK_FAILED);
 		exit(1);
 	}
-	if ((writeNum = fwrite(actMem + ptr_pageTabIt->blockNum * PAGE_SIZE, 
+	if ((writeNum = fwrite(actMem + ptr_pageTabIt->blockNum * PAGE_SIZE,
 		sizeof(BYTE), PAGE_SIZE, ptr_auxMem)) < PAGE_SIZE)
 	{
 #ifdef DEBUG
@@ -341,7 +358,7 @@ void do_error(ERROR_CODE code)
 		{
 			printf("访存失败：该地址内容不可执行\n");
 			break;
-		}		
+		}
 		case ERROR_INVALID_REQUEST:
 		{
 			printf("访存失败：非法访存请求\n");
@@ -415,7 +432,7 @@ void do_request()
 		}
 		default:
 			break;
-	}	
+	}
 }
 #endif
 
@@ -424,7 +441,8 @@ void do_print_info()
 {
 	unsigned int i, j, k;
 	char str[4];
-	printf("页号\t块号\t装入\t修改\t保护\t计数\t辅存\n");
+
+	printf("页号\t块号\t装入\t修改\t保护\t时间\t辅存\n");
 #ifndef ORZ
 	for (i = 0; i < PAGE_SUM; i++)
 #else
@@ -437,8 +455,8 @@ void do_print_info()
 #else
 		cur=(*pageTable)[i]+j;
 #endif
-		printf("%u\t%u\t%u\t%u\t%s\t%u\t%u\n", i, cur->blockNum, cur->filled, 
-			cur->edited, get_proType_str(str, cur->proType), 
+		printf("%u\t%u\t%u\t%u\t%s\t%u\t%u\n", i, cur->blockNum, cur->filled,
+			cur->edited, get_proType_str(str, cur->proType),
 			cur->count, cur->auxAddr);
 	}
 }
@@ -457,12 +475,32 @@ void do_print_actMem()
 		{
 			printf("%d\t%c\t",j*32+i,actMem[j*32+i]);
 		}
-		
+
 		printf("\n");
 	}
 }
 
 
+
+void do_print_auxMem(){
+	unsigned int i,j;
+	aux = fopen(AUXILIARY_MEMORY, "r");
+	fscanf(aux, "%s", s);
+	close(aux);
+	printf("辅存信息如下\n");
+	for(i = 0; i < 4; i++)
+		printf("地址:\t内容:\t");
+	printf("\n");
+	for(i = 0; i < 1024; i++)
+	{
+		for(j = 0; j < 4; j++)
+		{
+			printf("%d\t%c\t",j*64+i,s[j*64+i]);
+		}
+
+		printf("\n");
+	}
+}
 
 /* 获取页面保护类型字符串 */
 char *get_proType_str(char *str, BYTE type)
@@ -492,7 +530,7 @@ void initFile(){
 	//fopen_s是WINDOWS 下广泛用的，window下任务printf，fopen， scanf 等不安全，在后面加了个_S
 
 	FILE *temp;
-	temp = fopen(AUXILIARY_MEMORY, "w+");
+	temp = fopen(AUXILIARY_MEMORY, "w");
 	for(i = 0; i<VIRTUAL_MEMORY_SIZE-3; i++)
 	{
 		buffer[i] = key[rand() % 62];
@@ -501,13 +539,14 @@ void initFile(){
 	buffer[VIRTUAL_MEMORY_SIZE - 2] = 'q';
 	buffer[VIRTUAL_MEMORY_SIZE - 1] = 'y';
 	buffer[VIRTUAL_MEMORY_SIZE] = '\0';
-	
+
 	//Randomly generated 256 - bit string
-	fwrite(buffer, sizeof(BYTE),VIRTUAL_MEMORY_SIZE, temp);
-	
+	for(i=0;i<PROCESS_NUM;++i)
+		fwrite(buffer, sizeof(BYTE),VIRTUAL_MEMORY_SIZE, temp);
+
 	printf("System prompt: Initialization of auxiliary memory simulation file has been completed ");
 	fclose(temp);
-}	
+}
 
 int main(int argc, char* argv[])
 {
@@ -518,9 +557,10 @@ int main(int argc, char* argv[])
 		do_error(ERROR_FILE_OPEN_FAILED);
 		exit(1);
 	}
-#ifndef ORZ	
+//#ifndef ORZ
 	initFile();
-#endif
+	puts("Exec");
+//#endif
 	do_init();
 #ifndef ORZ
 	do_print_info();
@@ -556,3 +596,4 @@ int main(int argc, char* argv[])
 	}
 	return (0);
 }
+

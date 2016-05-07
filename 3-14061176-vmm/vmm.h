@@ -67,7 +67,8 @@ typedef enum {
 	REQUEST_SWITCH,
 	REQUEST_EXIT,
 	REQUEST_OUTPUT_MEM,
-	REQUEST_OUTPUT_PAGETABLE
+	REQUEST_OUTPUT_PAGETABLE,
+	REQUEST_OUTPUT_AUXMEM
 } MemoryAccessRequestType;
 
 /* 访存请求 */
@@ -122,7 +123,8 @@ void do_error(ERROR_CODE);
 
 /* 打印页表相关信息 */
 void do_print_info();
-
+void do_print_actMem();
+void do_print_auxMem();
 /* 获取页面保护类型字符串 */
 char *get_proType_str(char *, BYTE);
 

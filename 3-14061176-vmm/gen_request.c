@@ -5,14 +5,16 @@
 #include <sys/ipc.h>
 #include <fcntl.h>
 #include <sys/types.h>
-
+#include <stdlib.h>
 
 #define EXIT 1
 #define READ 2
 #define WRITE 3
 #define EXECUTE 4
 #define SWITCH 5
-
+#define OUTPUT_MEM 6
+#define OUTPUT_PAGETABLE 7
+#define OUTPUT_AUXMEM 8
 MemoryAccessRequest request;
 struct stat statbuf;
 
@@ -26,15 +28,8 @@ void send(){
     close(fd);
 }
 
-void recieve(){
+void receive(){
     int fd;
-    if (stat(FIFO_FILE, &statbuf) == 0){
-        if (remove(FIFO_FILE_OUT) < 0)
-            error_sys("remove failed");
-    }
-
-    if (mkfifo(FIFO_FILE_OUT,0666) < 0)
-        error_sys("mkfifo failed");
 
     if ((fd=open(FIFO_FILE_OUT, O_RDONLY)) < 0)
         error_sys("open fifo failed");
@@ -50,7 +45,7 @@ void request_read(){
     request.reqType = REQUEST_READ;
     request.virAddr = addr;
     send();
-    recieve();
+    receive();
     printf("%c\n", request.value);
 }
 
@@ -64,28 +59,50 @@ void request_write(){
     int addr;
     char c;
     scanf("%d %c",&addr, &c);
-
+    request.virAddr = addr;
     request.reqType = REQUEST_WRITE;
     request.value = c;
+
     send();
-    recieve();
+    receive();
 }
 
 void request_switch(){
     int id;
     scanf("%d",&id);
+
     request.reqType = REQUEST_SWITCH;
     request.value = id;
     send();
-    recieve();
+    receive();
 }
 
 void request_execute(){
+    int addr;
+    scanf("%d",&addr);
+    request.virAddr = addr;
     request.reqType = REQUEST_EXECUTE;
     send();
-    recieve();
+    receive();
 }
 
+void request_output_mem(){
+    request.reqType = REQUEST_OUTPUT_MEM;
+    send();
+    receive();
+}
+
+void request_output_pagetable(){
+    request.reqType = REQUEST_OUTPUT_PAGETABLE;
+    send();
+    receive();
+}
+
+void request_output_auxmem(){
+    request.reqType = REQUEST_OUTPUT_AUXMEM;
+    send();
+    receive();
+}
 int main(){
     int i;
     int type;
@@ -96,6 +113,9 @@ int main(){
             case WRITE  : request_write(); break;
             case SWITCH : request_switch(); break;
             case EXECUTE: request_execute(); break;
+            case OUTPUT_MEM : request_output_mem(); break;
+            case OUTPUT_PAGETABLE : request_output_pagetable(); break;
+            case OUTPUT_AUXMEM : request_output_auxmem(); break;
             default     : break;
         }
     }
