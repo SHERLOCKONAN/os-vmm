@@ -10,6 +10,8 @@
 /* 模拟辅存的文件路径 */
 #define AUXILIARY_MEMORY "vmm_auxMem"
 
+/* 页表页的页面大小 */
+#define FPAGE_SIZE 8
 /* 页面大小（字节）*/
 #define PAGE_SIZE 4
 /* 虚存空间大小（字节） */
@@ -18,6 +20,8 @@
 #define ACTUAL_MEMORY_SIZE (32 * 4)
 /* 总虚页数 */
 #define PAGE_SUM (VIRTUAL_MEMORY_SIZE / PAGE_SIZE)
+/* 总页表页数 */
+#define FPAGE_SUM (PAGE_SUM / FPAGE_SIZE)
 /* 总物理块数 */
 #define BLOCK_SUM (ACTUAL_MEMORY_SIZE / PAGE_SIZE)
 
@@ -38,7 +42,12 @@ typedef enum {
 	TRUE = 1, FALSE = 0
 } BOOL;
 
-
+/* 一级页表项 */
+typedef struct
+{
+	unsigned int fpageNum;
+	BOOL filled;
+} fPageTableItem, *Ptr_fPageTableItem;
 
 /* 页表项 */
 typedef struct
@@ -50,6 +59,8 @@ typedef struct
 	BOOL edited; //页面修改标识
 	unsigned long auxAddr; //外存地址
 	unsigned long count; //页面使用计数器
+	unsigned int processNum;
+	unsigned long stackNum;//栈顺序
 } PageTableItem, *Ptr_PageTableItem;
 
 /* 访存请求类型 */
@@ -62,11 +73,16 @@ typedef enum {
 /* 访存请求 */
 typedef struct
 {
+	int exist;
+	int ifnew;
+	int ifcomplete;
+	unsigned int address_fifo;
 	MemoryAccessRequestType reqType; //访存请求类型
 	unsigned long virAddr; //虚地址
 	BYTE value; //写请求的值
 } MemoryAccessRequest, *Ptr_MemoryAccessRequest;
 
+#define DATALEN sizeof(MemoryAccessRequest)
 
 /* 访存错误代码 */
 typedef enum {
@@ -79,7 +95,8 @@ typedef enum {
 	ERROR_FILE_CLOSE_FAILED, //文件关闭失败
 	ERROR_FILE_SEEK_FAILED, //文件指针定位失败
 	ERROR_FILE_READ_FAILED, //文件读取失败
-	ERROR_FILE_WRITE_FAILED //文件写入失败
+	ERROR_FILE_WRITE_FAILED, //文件写入失败
+	ERROR_WRONG_PROCESSNO //进程号不匹配
 } ERROR_CODE;
 
 /* 产生访存请求 */
@@ -93,6 +110,9 @@ void do_page_fault(Ptr_PageTableItem);
 
 /* LFU页面替换 */
 void do_LFU(Ptr_PageTableItem);
+
+/* LRU页面替换 */
+void do_LRU(Ptr_PageTableItem);
 
 /* 装入页面 */
 void do_page_in(Ptr_PageTableItem, unsigned in);
