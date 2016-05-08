@@ -1,0 +1,11 @@
+# depslib dependency file v1.0
+1462584312 source:i:\vmm(1)\debug\debug\main.c
+	<stdio.h>
+	<string.h>
+	<stdlib.h>
+	<time.h>
+	"vmm.h"
+
+1462558064 i:\vmm(1)\debug\debug\vmm.h
+	<time.h>
+
