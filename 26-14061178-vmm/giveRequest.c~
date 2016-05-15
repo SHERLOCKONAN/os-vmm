@@ -1,0 +1,59 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <time.h>
+#include <unistd.h>
+#include "vmm.h"
+#define FIFO "myFIFO"
+
+int main()
+{
+	unsigned long addr;
+	unsigned char value;
+	srandom(time(NULL));
+	FILE *fp;
+	int number;
+	while(1){
+		if((fp=fopen(FIFO,"w"))==NULL){
+			printf("write FIFO wrong");
+			return 0;
+		}
+		/* 随机产生请求地址 */
+		//ptr_memAccReq->virAddr = random() % VIRTUAL_MEMORY_SIZE;
+		addr=random() % VIRTUAL_MEMORY_SIZE;		
+		/* 随机产生请求类型 */
+		switch (random() % 3)
+		{
+			case 0: //读请求
+			{
+				//ptr_memAccReq->reqType = REQUEST_READ;
+				number=0;
+				printf("产生请求：\n地址：%lu\t类型：读取\n", addr);
+				fprintf(fp,"%d %lu",number,addr);
+				break;
+			}
+			case 1: //写请求
+			{
+				number=1;
+				//ptr_memAccReq->reqType = REQUEST_WRITE;
+				/* 随机产生待写入的值 */
+				value = random() % 0xFFu;
+				fprintf(fp,"%d %lu %02X",number,addr,value);
+				printf("产生请求：\n地址：%lu\t类型：写入\t值：%02X\n",addr, value);
+				break;
+			}
+			case 2:
+			{
+				number=2;
+				//ptr_memAccReq->reqType = REQUEST_EXECUTE;
+				fprintf(fp,"%d %lu",number,addr);
+				printf("产生请求：\n地址：%lu\t类型：执行\n", addr);
+				break;
+			}
+			default:
+				break;
+		}	
+		fclose(fp);
+		sleep(5);
+	}
+	return 0;
+}
