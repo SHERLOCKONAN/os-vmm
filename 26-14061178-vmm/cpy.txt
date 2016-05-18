@@ -1,0 +1,448 @@
+#include <stdio.h>
+#include <stdlib.h> 
+#include <time.h>
+#include "vmm.h"
+
+/* Ò³±í */
+PageTableItem pageTable[PAGE_SUM];
+/* Êµ´æ¿Õ¼ä */
+BYTE actMem[ACTUAL_MEMORY_SIZE];
+/* ÓÃÎÄ¼şÄ£Äâ¸¨´æ¿Õ¼ä */
+FILE *ptr_auxMem;
+/* ÎïÀí¿éÊ¹ÓÃ±êÊ¶ */
+BOOL blockStatus[BLOCK_SUM];
+/* ·Ã´æÇëÇó */
+Ptr_MemoryAccessRequest ptr_memAccReq;
+
+
+
+/* ³õÊ¼»¯»·¾³ */
+void do_init()
+{
+	int i, j;
+	srand(time(NULL));
+	for (i = 0; i < PAGE_SUM; i++)
+	{
+		pageTable[i].pageNum = i;
+		pageTable[i].filled = FALSE;
+		pageTable[i].edited = FALSE;
+		pageTable[i].count = 0;
+		/* Ê¹ÓÃËæ»úÊıÉèÖÃ¸ÃÒ³µÄ±£»¤ÀàĞÍ */
+		switch (rand() % 7)
+		{
+			case 0:
+			{
+				pageTable[i].proType = READABLE;
+				break;
+			}
+			case 1:
+			{
+				pageTable[i].proType = WRITABLE;
+				break;
+			}
+			case 2:
+			{
+				pageTable[i].proType = EXECUTABLE;
+				break;
+			}
+			case 3:
+			{
+				pageTable[i].proType = READABLE | WRITABLE;
+				break;
+			}
+			case 4:
+			{
+				pageTable[i].proType = READABLE | EXECUTABLE;
+				break;
+			}
+			case 5:
+			{
+				pageTable[i].proType = WRITABLE | EXECUTABLE;
+				break;
+			}
+			case 6:
+			{
+				pageTable[i].proType = READABLE | WRITABLE | EXECUTABLE;
+				break;
+			}
+			default:
+				break;
+		}
+		/* ÉèÖÃ¸ÃÒ³¶ÔÓ¦µÄ¸¨´æµØÖ· */
+		pageTable[i].auxAddr = i * PAGE_SIZE * 2;
+	}
+	for (j = 0; j < BLOCK_SUM; j++)
+	{
+		/* Ëæ»úÑ¡ÔñÒ»Ğ©ÎïÀí¿é½øĞĞÒ³Ãæ×°Èë */
+		if (rand() % 2 == 0)
+		{
+			do_page_in(&pageTable[j], j);
+			pageTable[j].blockNum = j;
+			pageTable[j].filled = TRUE;
+			blockStatus[j] = TRUE;
+		}
+		else
+			blockStatus[j] = FALSE;
+	}
+}
+
+
+/* ÏìÓ¦ÇëÇó */
+void do_response()
+{
+	Ptr_PageTableItem ptr_pageTabIt;
+	unsigned int pageNum, offAddr;
+	unsigned int actAddr;
+	
+	/* ¼ì²éµØÖ·ÊÇ·ñÔ½½ç */
+	if (ptr_memAccReq->virAddr < 0 || ptr_memAccReq->virAddr >= VIRTUAL_MEMORY_SIZE)
+	{
+		do_error(ERROR_OVER_BOUNDARY);
+		return;
+	}
+	
+	/* ¼ÆËãÒ³ºÅºÍÒ³ÄÚÆ«ÒÆÖµ */
+	pageNum = ptr_memAccReq->virAddr / PAGE_SIZE;
+	offAddr = ptr_memAccReq->virAddr % PAGE_SIZE;
+	printf("Ò³ºÅÎª£º%u\tÒ³ÄÚÆ«ÒÆÎª£º%u\n", pageNum, offAddr);
+
+	/* »ñÈ¡¶ÔÓ¦Ò³±íÏî */
+	ptr_pageTabIt = &pageTable[pageNum];
+	
+	/* ¸ù¾İÌØÕ÷Î»¾ö¶¨ÊÇ·ñ²úÉúÈ±Ò³ÖĞ¶Ï */
+	if (!ptr_pageTabIt->filled)
+	{
+		do_page_fault(ptr_pageTabIt);
+	}
+	
+	actAddr = ptr_pageTabIt->blockNum * PAGE_SIZE + offAddr;
+	printf("ÊµµØÖ·Îª£º%u\n", actAddr);
+	
+	/* ¼ì²éÒ³Ãæ·ÃÎÊÈ¨ÏŞ²¢´¦Àí·Ã´æÇëÇó */
+	switch (ptr_memAccReq->reqType)
+	{
+		case REQUEST_READ: //¶ÁÇëÇó
+		{
+			ptr_pageTabIt->count++;
+			if (!(ptr_pageTabIt->proType & READABLE)) //Ò³Ãæ²»¿É¶Á
+			{
+				do_error(ERROR_READ_DENY);
+				return;
+			}
+			/* ¶ÁÈ¡Êµ´æÖĞµÄÄÚÈİ */
+			printf("¶Á²Ù×÷³É¹¦£ºÖµÎª%02X\n", actMem[actAddr]);
+			break;
+		}
+		case REQUEST_WRITE: //Ğ´ÇëÇó
+		{
+			ptr_pageTabIt->count++;
+			if (!(ptr_pageTabIt->proType & WRITABLE)) //Ò³Ãæ²»¿ÉĞ´
+			{
+				do_error(ERROR_WRITE_DENY);	
+				return;
+			}
+			/* ÏòÊµ´æÖĞĞ´ÈëÇëÇóµÄÄÚÈİ */
+			actMem[actAddr] = ptr_memAccReq->value;
+			ptr_pageTabIt->edited = TRUE;			
+			printf("Ğ´²Ù×÷³É¹¦\n");
+			break;
+		}
+		case REQUEST_EXECUTE: //Ö´ĞĞÇëÇó
+		{
+			ptr_pageTabIt->count++;
+			if (!(ptr_pageTabIt->proType & EXECUTABLE)) //Ò³Ãæ²»¿ÉÖ´ĞĞ
+			{
+				do_error(ERROR_EXECUTE_DENY);
+				return;
+			}			
+			printf("Ö´ĞĞ³É¹¦\n");
+			break;
+		}
+		default: //·Ç·¨ÇëÇóÀàĞÍ
+		{	
+			do_error(ERROR_INVALID_REQUEST);
+			return;
+		}
+	}
+}
+
+/* ´¦ÀíÈ±Ò³ÖĞ¶Ï */
+void do_page_fault(Ptr_PageTableItem ptr_pageTabIt)
+{
+	unsigned int i;
+	printf("²úÉúÈ±Ò³ÖĞ¶Ï£¬¿ªÊ¼½øĞĞµ÷Ò³...\n");
+	for (i = 0; i < BLOCK_SUM; i++)
+	{
+		if (!blockStatus[i])
+		{
+			/* ¶Á¸¨´æÄÚÈİ£¬Ğ´Èëµ½Êµ´æ */
+			do_page_in(ptr_pageTabIt, i);
+			
+			/* ¸üĞÂÒ³±íÄÚÈİ */
+			ptr_pageTabIt->blockNum = i;
+			ptr_pageTabIt->filled = TRUE;
+			ptr_pageTabIt->edited = FALSE;
+			ptr_pageTabIt->count = 0;
+			
+			blockStatus[i] = TRUE;
+			return;
+		}
+	}
+	/* Ã»ÓĞ¿ÕÏĞÎïÀí¿é£¬½øĞĞÒ³ÃæÌæ»» */
+	do_LFU(ptr_pageTabIt);
+}
+
+/* ¸ù¾İLFUËã·¨½øĞĞÒ³ÃæÌæ»» */
+void do_LFU(Ptr_PageTableItem ptr_pageTabIt)
+{
+	unsigned int i, min, page;
+	printf("Ã»ÓĞ¿ÕÏĞÎïÀí¿é£¬¿ªÊ¼½øĞĞLFUÒ³ÃæÌæ»»...\n");
+	for (i = 0, min = 0xFFFFFFFF, page = 0; i < PAGE_SUM; i++)
+	{
+		if (pageTable[i].count < min)
+		{
+			min = pageTable[i].count;
+			page = i;
+		}
+	}
+	printf("Ñ¡ÔñµÚ%uÒ³½øĞĞÌæ»»\n", page);
+	if (pageTable[page].edited)
+	{
+		/* Ò³ÃæÄÚÈİÓĞĞŞ¸Ä£¬ĞèÒªĞ´»ØÖÁ¸¨´æ */
+		printf("¸ÃÒ³ÄÚÈİÓĞĞŞ¸Ä£¬Ğ´»ØÖÁ¸¨´æ\n");
+		do_page_out(&pageTable[page]);
+	}
+	pageTable[page].filled = FALSE;
+	pageTable[page].count = 0;
+
+
+	/* ¶Á¸¨´æÄÚÈİ£¬Ğ´Èëµ½Êµ´æ */
+	do_page_in(ptr_pageTabIt, pageTable[page].blockNum);
+	
+	/* ¸üĞÂÒ³±íÄÚÈİ */
+	ptr_pageTabIt->blockNum = pageTable[page].blockNum;
+	ptr_pageTabIt->filled = TRUE;
+	ptr_pageTabIt->edited = FALSE;
+	ptr_pageTabIt->count = 0;
+	printf("Ò³ÃæÌæ»»³É¹¦\n");
+}
+
+/* ½«¸¨´æÄÚÈİĞ´ÈëÊµ´æ */
+void do_page_in(Ptr_PageTableItem ptr_pageTabIt, unsigned int blockNum)
+{
+	unsigned int readNum;
+	if (fseek(ptr_auxMem, ptr_pageTabIt->auxAddr, SEEK_SET) < 0)
+	{
+//#ifdef DEBUG
+		printf("DEBUG: auxAddr=%u\tftell=%u\n", ptr_pageTabIt->auxAddr, ftell(ptr_auxMem));
+//#endif
+		do_error(ERROR_FILE_SEEK_FAILED);
+		exit(1);
+	}
+	//printf("auxAddr=%u\tftell=%u\n", ptr_pageTabIt->auxAddr, ftell(ptr_auxMem));
+	if ((readNum = fread(actMem + blockNum * PAGE_SIZE, 
+		sizeof(BYTE), PAGE_SIZE, ptr_auxMem)) < PAGE_SIZE)
+	{
+//#ifdef DEBUG
+		printf("DEBUG: auxAddr=%u\tftell=%u\n", ptr_pageTabIt->auxAddr, ftell(ptr_auxMem));
+		printf("DEBUG: blockNum=%u\treadNum=%u\n", blockNum, readNum);
+		printf("DEGUB: feof=%d\tferror=%d\n", feof(ptr_auxMem), ferror(ptr_auxMem));
+		//printf("JIBA: sizeof(BYTE)*PAGE_SIZE=%d\n", sizeof(BYTE)*PAGE_SIZE);
+//#endif
+		do_error(ERROR_FILE_READ_FAILED);
+		exit(1);
+	}
+	printf("µ÷Ò³³É¹¦£º¸¨´æµØÖ·%u-->>ÎïÀí¿é%u\n", ptr_pageTabIt->auxAddr, blockNum);
+}
+
+/* ½«±»Ìæ»»Ò³ÃæµÄÄÚÈİĞ´»Ø¸¨´æ */
+void do_page_out(Ptr_PageTableItem ptr_pageTabIt)
+{
+	unsigned int writeNum;
+	if (fseek(ptr_auxMem, ptr_pageTabIt->auxAddr, SEEK_SET) < 0)
+	{
+#ifdef DEBUG
+		printf("DEBUG: auxAddr=%u\tftell=%u\n", ptr_pageTabIt, ftell(ptr_auxMem));
+#endif
+		do_error(ERROR_FILE_SEEK_FAILED);
+		exit(1);
+	}
+	if ((writeNum = fwrite(actMem + ptr_pageTabIt->blockNum * PAGE_SIZE, 
+		sizeof(BYTE), PAGE_SIZE, ptr_auxMem)) < PAGE_SIZE)
+	{
+#ifdef DEBUG
+		printf("DEBUG: auxAddr=%u\tftell=%u\n", ptr_pageTabIt->auxAddr, ftell(ptr_auxMem));
+		printf("DEBUG: writeNum=%u\n", writeNum);
+		printf("DEGUB: feof=%d\tferror=%d\n", feof(ptr_auxMem), ferror(ptr_auxMem));
+#endif
+		do_error(ERROR_FILE_WRITE_FAILED);
+		exit(1);
+	}
+	printf("Ğ´»Ø³É¹¦£ºÎïÀí¿é%u-->>¸¨´æµØÖ·%03X\n", ptr_pageTabIt->auxAddr, ptr_pageTabIt->blockNum);
+}
+
+/* ´íÎó´¦Àí */
+void do_error(ERROR_CODE code)
+{
+	switch (code)
+	{
+		case ERROR_READ_DENY:
+		{
+			printf("·Ã´æÊ§°Ü£º¸ÃµØÖ·ÄÚÈİ²»¿É¶Á\n");
+			break;
+		}
+		case ERROR_WRITE_DENY:
+		{
+			printf("·Ã´æÊ§°Ü£º¸ÃµØÖ·ÄÚÈİ²»¿ÉĞ´\n");
+			break;
+		}
+		case ERROR_EXECUTE_DENY:
+		{
+			printf("·Ã´æÊ§°Ü£º¸ÃµØÖ·ÄÚÈİ²»¿ÉÖ´ĞĞ\n");
+			break;
+		}		
+		case ERROR_INVALID_REQUEST:
+		{
+			printf("·Ã´æÊ§°Ü£º·Ç·¨·Ã´æÇëÇó\n");
+			break;
+		}
+		case ERROR_OVER_BOUNDARY:
+		{
+			printf("·Ã´æÊ§°Ü£ºµØÖ·Ô½½ç\n");
+			break;
+		}
+		case ERROR_FILE_OPEN_FAILED:
+		{
+			printf("ÏµÍ³´íÎó£º´ò¿ªÎÄ¼şÊ§°Ü\n");
+			break;
+		}
+		case ERROR_FILE_CLOSE_FAILED:
+		{
+			printf("ÏµÍ³´íÎó£º¹Ø±ÕÎÄ¼şÊ§°Ü\n");
+			break;
+		}
+		case ERROR_FILE_SEEK_FAILED:
+		{
+			printf("ÏµÍ³´íÎó£ºÎÄ¼şÖ¸Õë¶¨Î»Ê§°Ü\n");
+			break;
+		}
+		case ERROR_FILE_READ_FAILED:
+		{
+			printf("ÏµÍ³´íÎó£º¶ÁÈ¡ÎÄ¼şÊ§°Ü\n");
+			break;
+		}
+		case ERROR_FILE_WRITE_FAILED:
+		{
+			printf("ÏµÍ³´íÎó£ºĞ´ÈëÎÄ¼şÊ§°Ü\n");
+			break;
+		}
+		default:
+		{
+			printf("Î´Öª´íÎó£ºÃ»ÓĞÕâ¸ö´íÎó´úÂë\n");
+		}
+	}
+}
+
+/* ²úÉú·Ã´æÇëÇó */
+void do_request()
+{
+	/* Ëæ»ú²úÉúÇëÇóµØÖ· */
+	ptr_memAccReq->virAddr = rand() % VIRTUAL_MEMORY_SIZE;
+	/* Ëæ»ú²úÉúÇëÇóÀàĞÍ */
+	switch (rand() % 3)
+	{
+		case 0: //¶ÁÇëÇó
+		{
+			ptr_memAccReq->reqType = REQUEST_READ;
+			printf("²úÉúÇëÇó£º\nµØÖ·£º%u\tÀàĞÍ£º¶ÁÈ¡\n", ptr_memAccReq->virAddr);
+			break;
+		}
+		case 1: //Ğ´ÇëÇó
+		{
+			ptr_memAccReq->reqType = REQUEST_WRITE;
+			/* Ëæ»ú²úÉú´ıĞ´ÈëµÄÖµ */
+			ptr_memAccReq->value = rand() % 0xFFu;
+			printf("²úÉúÇëÇó£º\nµØÖ·£º%u\tÀàĞÍ£ºĞ´Èë\tÖµ£º%02X\n", ptr_memAccReq->virAddr, ptr_memAccReq->value);
+			break;
+		}
+		case 2:
+		{
+			ptr_memAccReq->reqType = REQUEST_EXECUTE;
+			printf("²úÉúÇëÇó£º\nµØÖ·£º%u\tÀàĞÍ£ºÖ´ĞĞ\n", ptr_memAccReq->virAddr);
+			break;
+		}
+		default:
+			break;
+	}	
+}
+
+/* ´òÓ¡Ò³±í */
+void do_print_info()
+{
+	unsigned int i, j, k;
+	char str[4];
+	printf("Ò³ºÅ\t¿éºÅ\t×°Èë\tĞŞ¸Ä\t±£»¤\t¼ÆÊı\t¸¨´æ\n");
+	for (i = 0; i < PAGE_SUM; i++)
+	{
+		printf("%u\t%u\t%u\t%u\t%s\t%u\t%u\n", i, pageTable[i].blockNum, pageTable[i].filled, 
+			pageTable[i].edited, get_proType_str(str, pageTable[i].proType), 
+			pageTable[i].count, pageTable[i].auxAddr);
+	}
+}
+
+/* »ñÈ¡Ò³Ãæ±£»¤ÀàĞÍ×Ö·û´® */
+char *get_proType_str(char *str, BYTE type)
+{
+	if (type & READABLE)
+		str[0] = 'r';
+	else
+		str[0] = '-';
+	if (type & WRITABLE)
+		str[1] = 'w';
+	else
+		str[1] = '-';
+	if (type & EXECUTABLE)
+		str[2] = 'x';
+	else
+		str[2] = '-';
+	str[3] = '\0';
+	return str;
+}
+
+int main(int argc, char* argv[])
+{
+	char c;
+	int i;
+	if (!(ptr_auxMem = fopen(AUXILIARY_MEMORY, "r+")))
+	{
+		do_error(ERROR_FILE_OPEN_FAILED);
+		exit(1);
+	}
+	do_init();
+	do_print_info();
+	ptr_memAccReq = (Ptr_MemoryAccessRequest) malloc(sizeof(MemoryAccessRequest));
+	/* ÔÚÑ­»·ÖĞÄ£Äâ·Ã´æÇëÇóÓë´¦Àí¹ı³Ì */
+	while (TRUE)
+	{
+		do_request();
+		do_response();
+		printf("°´Y´òÓ¡Ò³±í£¬°´ÆäËû¼ü²»´òÓ¡...\n");
+		if ((c = getchar()) == 'y' || c == 'Y')
+			do_print_info();
+		while (c != '\n')
+			c = getchar();
+		printf("°´XÍË³ö³ÌĞò£¬°´ÆäËû¼ü¼ÌĞø...\n");
+		if ((c = getchar()) == 'x' || c == 'X')
+			break;
+		while (c != '\n')
+			c = getchar();
+		//sleep(5000);
+	}
+
+	if (fclose(ptr_auxMem) == EOF)
+	{
+		do_error(ERROR_FILE_CLOSE_FAILED);
+		exit(1);
+	}
+	return (0);
+}                                                     ÿÿÿÿÿÿÿÿÿÿÿÿ                                                                                                                    ÿÿÿÿÿÿÿÿÿÿÿÿ                                                
