@@ -78,6 +78,7 @@ int main(int argc, char* argv[])
 			exit(1);
 		}
 		scanf("%s",Request);
+		scanf("%s", Request);
 		if(fwrite(Request,sizeof(BYTE),strlen(Request),fp)<strlen(Request)){
 			printf("系统错误：写入文件失败\n");
 			break;
